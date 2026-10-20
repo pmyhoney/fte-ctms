@@ -1,0 +1,5 @@
+# 회사 데이터가 들어있는 초기 데이터 — 공개 저장소에 올리지 않는다
+seed/
+# Supabase CLI 로컬 상태
+supabase/.temp/
+supabase/.branches/
