@@ -9,19 +9,34 @@ function ymd(d){
 function todayYmd(){ return ymd(new Date()); }
 
 /* ---------------- 재택 (월간 달력) ---------------- */
-const wfh = { ym: null, days: null, loadedYm: null }; // ym은 처음 열 때 이번 달로 정한다(currentPeriod는 app.js에 있음), days: "YYYY-MM-DD" -> { journal }
+// ym은 처음 열 때 이번 달로 정한다(currentPeriod는 app.js에 있음)
+// days: 내 기록 "YYYY-MM-DD" -> { kind, journal } / others: 관리자에게만 — 다른 사람 기록 "YYYY-MM-DD" -> [{ name, kind }]
+const wfh = { ym: null, days: null, others: {}, loadedYm: null, names: null };
+const WFH_KIND = { full: "종일", half: "반일" };
 
 async function wfhLoad(){
   const ym = wfh.ym;
   const [y, m] = ym.split("-").map(Number);
   const first = ym + "-01";
   const last = ymd(new Date(y, m, 0));
-  const { data, error } = await sb.from("wfh_days").select("day,journal")
-    .eq("user_id", currentProfile.id).gte("day", first).lte("day", last);
+  const me = currentProfile.id;
+  let query = sb.from("wfh_days").select("user_id,day,kind,journal").gte("day", first).lte("day", last);
+  if(!isAdmin()) query = query.eq("user_id", me);
+  const { data, error } = await query;
   if(error){ showToast("재택 일정을 불러오지 못했어요: " + error.message, { error: true }); return; }
+  if(isAdmin() && !wfh.names){ // 관리자: 달력에 이름을 보여주려고 회원 이름을 한 번 불러온다
+    const res = await sb.from("profiles").select("id,name,login_id");
+    wfh.names = {};
+    (res.data || []).forEach(p => wfh.names[p.id] = p.name || p.login_id);
+  }
   if(ym !== wfh.ym) return; // 불러오는 사이 다른 달로 넘어갔다
-  wfh.days = {};
-  data.forEach(r => wfh.days[r.day] = { journal: r.journal || "" });
+  wfh.days = {}; wfh.others = {};
+  data.forEach(r => {
+    const kind = WFH_KIND[r.kind] ? r.kind : "full";
+    if(r.user_id === me) wfh.days[r.day] = { kind, journal: r.journal || "" };
+    else if(isAdmin()) (wfh.others[r.day] = wfh.others[r.day] || []).push({ name: (wfh.names && wfh.names[r.user_id]) || "이름 없음", kind });
+  });
+  Object.keys(wfh.others).forEach(k => wfh.others[k].sort((a, b) => a.name.localeCompare(b.name, "ko")));
   wfh.loadedYm = ym;
   if(state.tab === "wfh") renderTabContent();
 }
@@ -51,20 +66,23 @@ function renderWfhTab(){
   for(let d = 1; d <= lastDay; d++){
     const key = wfh.ym + "-" + String(d).padStart(2,"0");
     const rec = wfh.days[key];
+    const others = wfh.others[key] || [];
     const dow = (startDow + d - 1) % 7;
     const isToday = key === today;
     cells +=
       '<div class="wfh-cell' + (rec ? ' on' : '') + (isToday ? ' today' : '') + (key < today ? ' past' : '') + '" onclick="wfhClick(\'' + key + '\')">' +
         '<div class="wfh-num" style="' + (dow === 0 ? 'color:#D64550;' : dow === 6 ? 'color:#3E6FB0;' : '') + '">' + d + '</div>' +
-        (rec ? '<div class="wfh-tag">재택</div>' : '') +
+        (rec ? '<div class="wfh-tag">재택 ' + WFH_KIND[rec.kind] + '</div>' : '') +
         (rec && rec.journal ? '<div class="wfh-tag journal">일지 ✓</div>' : '') +
+        others.slice(0, 3).map(o => '<div class="wfh-name">' + esc(o.name) + ' · ' + WFH_KIND[o.kind] + '</div>').join("") +
+        (others.length > 3 ? '<div class="wfh-name">외 ' + (others.length - 3) + '명</div>' : '') +
       '</div>';
   }
   const count = Object.keys(wfh.days).length;
   return '<div class="card">' +
     '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">' +
       '<button class="icon-round view-ok" onclick="wfhMove(-1)">' + icon('chevronLeft', 15) + '</button>' +
-      '<div style="font-weight:800;font-size:15px;">' + periodLabel(wfh.ym) + ' <span style="font-size:12px;color:#94A3B8;font-weight:600;">재택 ' + count + '일</span></div>' +
+      '<div style="font-weight:800;font-size:15px;">' + periodLabel(wfh.ym) + ' <span style="font-size:12px;color:#94A3B8;font-weight:600;">내 재택 ' + count + '일</span></div>' +
       '<button class="icon-round view-ok" onclick="wfhMove(1)">' + icon('chevronRight', 15) + '</button>' +
     '</div>' +
     '<div class="wfh-grid">' +
@@ -72,39 +90,58 @@ function renderWfhTab(){
       cells +
     '</div>' +
     '<div style="font-size:12px;color:#94A3B8;margin-top:12px;line-height:1.6;">' +
-      '날짜를 누르면 재택 예정으로 지정되고, 한 번 더 누르면 취소돼요. 재택 당일(또는 지난 재택일)을 누르면 업무 일지를 쓸 수 있어요.' +
+      '날짜를 누르면 반일·종일을 골라 재택을 신청하거나 취소할 수 있어요. 재택 당일(또는 지난 재택일)을 누르면 업무 일지를 쓸 수 있어요.' +
+      (isAdmin() ? '<br/>관리자 화면이라 다른 팀원의 재택 신청도 이름으로 함께 보여요.' : '') +
     '</div>' +
   '</div>';
 }
 
-async function wfhClick(key){
+function wfhClick(key){
   const today = todayYmd();
   const rec = wfh.days[key];
   if(key <= today && rec){ wfhJournalOpen(key); return; }
-  if(key < today){ showToast("지난 날짜는 재택으로 지정할 수 없어요"); return; }
-  if(rec){
-    const { error } = await sb.from("wfh_days").delete().eq("user_id", currentProfile.id).eq("day", key);
-    if(error){ showToast("취소하지 못했어요: " + error.message, { error: true }); return; }
-    delete wfh.days[key];
-    showToast(key + " 재택 예정을 취소했어요");
-  }else{
-    const { error } = await sb.from("wfh_days").insert({ day: key });
-    if(error){ showToast("지정하지 못했어요: " + error.message, { error: true }); return; }
-    wfh.days[key] = { journal: "" };
-    showToast(key + " 재택 예정으로 지정했어요");
-  }
+  if(key < today){ showToast("지난 날짜는 재택으로 신청할 수 없어요"); return; }
+  wfhPlanOpen(key);
+}
+
+// 재택 신청/변경 팝업: 반일·종일 선택, 이미 신청했다면 취소
+function wfhPlanOpen(key){
+  const rec = wfh.days[key];
+  const btn = (kind) => '<button class="add-btn" style="flex:1;justify-content:center;padding:14px 0;font-size:14px;' +
+    (rec && rec.kind === kind ? '' : 'background:#fff;color:var(--accent);border:1px solid var(--accent);') +
+    '" onclick="wfhPlanSave(\'' + key + '\',\'' + kind + '\')">' + WFH_KIND[kind] + '</button>';
+  showModal(
+    '<div style="font-weight:800;font-size:14px;margin-bottom:4px;">' + (rec ? '재택 변경' : '재택 신청') + '</div>' +
+    '<div style="font-size:12px;color:#94A3B8;margin-bottom:14px;">' + key + (rec ? ' · 지금 ' + WFH_KIND[rec.kind] + ' 신청됨' : '') + '</div>' +
+    '<div style="display:flex;gap:8px;margin-bottom:12px;">' + btn("half") + btn("full") + '</div>' +
+    '<div style="display:flex;gap:8px;">' +
+      (rec ? '<button class="add-btn" style="flex:1;justify-content:center;background:#fff;color:#B91C1C;border:1px solid #F3B8B8;" onclick="wfhCancel(\'' + key + '\')">재택 취소</button>' : '') +
+      '<button class="add-btn" style="flex:1;justify-content:center;background:#fff;color:#475569;border:1px solid var(--border);" onclick="closeModal()">닫기</button>' +
+    '</div>'
+  );
+}
+
+async function wfhPlanSave(key, kind){
+  const rec = wfh.days[key];
+  const { error } = rec
+    ? await sb.from("wfh_days").update({ kind, updated_at: new Date().toISOString() }).eq("user_id", currentProfile.id).eq("day", key)
+    : await sb.from("wfh_days").insert({ day: key, kind });
+  if(error){ showToast("신청하지 못했어요: " + error.message, { error: true }); return; }
+  wfh.days[key] = { kind, journal: rec ? rec.journal : "" };
+  closeModal();
+  showToast(key + " 재택(" + WFH_KIND[kind] + ")으로 신청했어요");
   renderTabContent();
-  if(key === today && wfh.days[key]) wfhJournalOpen(key); // 당일에 지정하면 바로 일지 작성
+  if(key === todayYmd()) wfhJournalOpen(key); // 당일에 신청하면 바로 일지 작성
 }
 
 function wfhJournalOpen(key){
   const rec = wfh.days[key];
   showModal(
     '<div style="font-weight:800;font-size:14px;margin-bottom:4px;">업무 일지</div>' +
-    '<div style="font-size:12px;color:#94A3B8;margin-bottom:10px;">' + key + ' 재택근무</div>' +
+    '<div style="font-size:12px;color:#94A3B8;margin-bottom:10px;">' + key + ' 재택근무 (' + WFH_KIND[rec.kind] + ')</div>' +
     '<textarea id="wfh-journal" class="input" rows="10" style="resize:vertical;line-height:1.5;" placeholder="오늘 한 업무를 적어 주세요">' + esc(rec.journal) + '</textarea>' +
     '<div style="display:flex;gap:8px;margin-top:12px;">' +
-      (key === todayYmd() ? '<button class="add-btn" style="background:#fff;color:#B91C1C;border:1px solid #F3B8B8;" onclick="wfhCancelToday(\'' + key + '\')">재택 취소</button>' : '') +
+      (key === todayYmd() ? '<button class="add-btn" style="background:#fff;color:var(--accent);border:1px solid var(--accent);" onclick="wfhPlanOpen(\'' + key + '\')">변경·취소</button>' : '') +
       '<button class="add-btn" style="flex:1;justify-content:center;background:#fff;color:#475569;border:1px solid var(--border);" onclick="closeModal()">닫기</button>' +
       '<button class="add-btn" style="flex:1;justify-content:center;" onclick="wfhJournalSave(\'' + key + '\')">저장</button>' +
     '</div>'
@@ -123,14 +160,14 @@ async function wfhJournalSave(key){
   renderTabContent();
 }
 
-async function wfhCancelToday(key, confirmed){
+async function wfhCancel(key, confirmed){
   if(wfh.days[key].journal && !confirmed){
     showModal(
       '<div style="font-weight:800;font-size:14px;margin-bottom:8px;">재택 취소</div>' +
       '<div style="font-size:12.5px;color:#475569;line-height:1.6;margin-bottom:16px;">작성한 업무 일지도 함께 지워져요. 재택을 취소할까요?</div>' +
       '<div style="display:flex;gap:8px;">' +
         '<button class="add-btn" style="flex:1;justify-content:center;background:#fff;color:#475569;border:1px solid var(--border);" onclick="wfhJournalOpen(\'' + key + '\')">돌아가기</button>' +
-        '<button class="add-btn" style="flex:1;justify-content:center;background:var(--danger);" onclick="wfhCancelToday(\'' + key + '\', true)">재택 취소</button>' +
+        '<button class="add-btn" style="flex:1;justify-content:center;background:var(--danger);" onclick="wfhCancel(\'' + key + '\', true)">재택 취소</button>' +
       '</div>'
     );
     return;
@@ -281,6 +318,6 @@ async function weeklyExport(){
 
 // 로그아웃할 때 다른 사람이 이어서 로그인해도 이전 계정의 기록이 보이지 않게 비운다.
 function worklogReset(){
-  wfh.ym = null; wfh.days = null; wfh.loadedYm = null;
+  wfh.ym = null; wfh.days = null; wfh.others = {}; wfh.loadedYm = null; wfh.names = null;
   weekly.rows = null; weekly.selected = {};
 }

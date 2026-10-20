@@ -762,7 +762,7 @@ function renderHeader(){
   '</div>';
   el.outerHTML =
     '<div class="header" id="header"><div class="header-inner">' +
-      '<div><div class="eyebrow">MEDICAL AFFAIRS</div><h1>FTE 및 과제 관리</h1></div>' +
+      '<div><div class="eyebrow">MEDICAL AFFAIRS</div><h1>임상의학팀 업무 관리</h1></div>' +
       '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">' +
         roleBadge +
         statusHtml +
@@ -780,10 +780,7 @@ function renderHeader(){
 
 function renderTabBar(){
   const items = [
-    { id: "dashboard", label: "배정 현황", icon: "dashboard" },
-    { id: "assign", label: "과제 배정", icon: "arrow" },
-    { id: "status", label: "과제 진행 현황", icon: "flag" },
-    { id: "monthly", label: "월별·분기별", icon: "calendar" },
+    { id: "fte", label: "FTE 관리", icon: "dashboard" },
     { id: "ctms", label: "CTMS", icon: "clipboard" },
     { id: "wfh", label: "재택", icon: "calendar" },
     { id: "weekly", label: "주간보고", icon: "edit" },
@@ -794,7 +791,7 @@ function renderTabBar(){
   document.getElementById("tabbar").innerHTML =
     '<div class="tabbar">' +
     items.map(it =>
-      '<button class="tab-btn '+(state.tab===it.id?'active':'')+'" onclick="setTab(\''+it.id+'\')">' +
+      '<button class="tab-btn '+((it.id === "fte" ? FTE_SUB_TABS.some(s => s.id === state.tab) : state.tab===it.id)?'active':'')+'" onclick="setTab(\''+it.id+'\')">' +
         icon(it.icon,14) + it.label +
       '</button>'
     ).join("") +
@@ -802,8 +799,23 @@ function renderTabBar(){
 }
 
 const ADMIN_ONLY_TABS = ["members", "types", "products"];
+// 'FTE 관리' 탭 아래의 하위 탭 — state.tab에는 하위 탭 id가 그대로 들어간다
+const FTE_SUB_TABS = [
+  { id: "dashboard", label: "배정 현황" },
+  { id: "assign", label: "과제 배정" },
+  { id: "status", label: "과제 진행 현황" },
+  { id: "monthly", label: "월별·분기별" },
+];
+let lastFteSubTab = "dashboard";
+function fteSubTabBar(){
+  const btn = (it) => '<button class="view-ok" onclick="setTab(\'' + it.id + '\')" style="flex:1;padding:9px 6px;border-radius:8px;border:1px solid ' +
+    (state.tab === it.id ? "var(--accent)" : "var(--border)") + ';background:' + (state.tab === it.id ? "var(--accent)" : "#fff") + ';color:' + (state.tab === it.id ? "#fff" : "#475569") + ';font-size:13px;font-weight:700;">' + it.label + '</button>';
+  return '<div style="display:flex;gap:6px;margin-bottom:14px;">' + FTE_SUB_TABS.map(btn).join("") + '</div>';
+}
 function setTab(id){
+  if(id === "fte") id = lastFteSubTab;
   if(ADMIN_ONLY_TABS.indexOf(id) >= 0 && !isAdmin()) id = "dashboard";
+  if(FTE_SUB_TABS.some(s => s.id === id)) lastFteSubTab = id;
   state.tab = id; renderTabBar(); renderTabContent();
 }
 
@@ -841,6 +853,7 @@ function renderTabContent(){
   else if(state.tab === "ctms") el.innerHTML = renderCtmsTab();
   else if(state.tab === "wfh") el.innerHTML = renderWfhTab(); // worklog.js
   else if(state.tab === "weekly") el.innerHTML = renderWeeklyTab(); // worklog.js
+  if(FTE_SUB_TABS.some(s => s.id === state.tab)) el.insertAdjacentHTML("afterbegin", fteSubTabBar());
   if(state.tab === "assign") wireAssignTab();
 }
 

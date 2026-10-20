@@ -7,7 +7,7 @@ self.addEventListener("fetch", (event) => {
   if(event.request.mode !== "navigate") return; // 화면 이동 요청만 다룬다
   event.respondWith(
     fetch(event.request).catch(() => new Response(
-      '<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>FTE 및 과제 관리</title></head>' +
+      '<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>임상의학팀 업무 관리</title></head>' +
       '<body style="margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#F4F6F8;font-family:\'Malgun Gothic\',sans-serif;color:#17232E;text-align:center;padding:20px;">' +
       '<div><div style="font-size:18px;font-weight:800;margin-bottom:8px;">인터넷에 연결되지 않았어요</div>' +
       '<div style="font-size:13px;color:#64748B;margin-bottom:16px;">연결을 확인한 뒤 다시 시도해 주세요.</div>' +

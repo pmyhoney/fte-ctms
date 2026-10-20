@@ -16,7 +16,7 @@ function renderAuthScreen(mode, notice){
     '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;">' +
       '<div class="card" style="max-width:360px;width:100%;">' +
         '<div class="eyebrow">MEDICAL AFFAIRS</div>' +
-        '<h1 style="margin:4px 0 16px;">FTE 및 과제 관리</h1>' +
+        '<h1 style="margin:4px 0 16px;">임상의학팀 업무 관리</h1>' +
         (notice ? '<div style="font-size:12px;color:#B45309;background:#FEF3E2;padding:8px 10px;border-radius:7px;margin-bottom:16px;">'+esc(notice)+'</div>' : '') +
         '<div class="tabbar" style="margin:0 0 16px;">' +
           '<button class="tab-btn '+(isSignup?'':'active')+'" style="flex:1;justify-content:center;" onclick="renderAuthScreen(\'login\')">로그인</button>' +
