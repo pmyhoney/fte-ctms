@@ -1,12 +1,12 @@
 {
-  "name": "FTE 및 과제 관리",
-  "short_name": "FTE 관리",
+  "name": "GC MA 및 과제 관리",
+  "short_name": "GC MA 관리",
   "description": "팀 FTE 배정과 과제(CTMS) 관리",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "any",
-  "background_color": "#F4F6F8",
+  "background_color": "#EEE5C7",
   "theme_color": "#1F6F78",
   "lang": "ko",
   "icons": [
