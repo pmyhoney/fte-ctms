@@ -115,6 +115,7 @@ async function logout(reason){
   try{ await sb.auth.signOut(); }catch(e){ /* session may already be gone */ }
   currentProfile = null;
   profilesCache = null;
+  worklogReset(); // worklog.js
   Object.assign(state, {
     role: null, loaded: false, dirty: false, saveError: false, saveBlocked: false,
     taskTypes: [], members: [], products: [], assignments: [], activityLog: [],

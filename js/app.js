@@ -785,6 +785,8 @@ function renderTabBar(){
     { id: "status", label: "과제 진행 현황", icon: "flag" },
     { id: "monthly", label: "월별·분기별", icon: "calendar" },
     { id: "ctms", label: "CTMS", icon: "clipboard" },
+    { id: "wfh", label: "재택", icon: "calendar" },
+    { id: "weekly", label: "주간보고", icon: "edit" },
     { id: "members", label: "팀원 관리", icon: "users", adminOnly: true },
     { id: "types", label: "과제 유형", icon: "list", adminOnly: true },
     { id: "products", label: "품목 관리", icon: "box", adminOnly: true },
@@ -837,6 +839,8 @@ function renderTabContent(){
   else if(state.tab === "products") el.innerHTML = renderProductsTab();
   else if(state.tab === "status") el.innerHTML = renderStatusTab();
   else if(state.tab === "ctms") el.innerHTML = renderCtmsTab();
+  else if(state.tab === "wfh") el.innerHTML = renderWfhTab(); // worklog.js
+  else if(state.tab === "weekly") el.innerHTML = renderWeeklyTab(); // worklog.js
   if(state.tab === "assign") wireAssignTab();
 }
 

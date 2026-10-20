@@ -1,0 +1,286 @@
+/* ---------------- 재택 · 주간보고 탭 ----------------
+   두 탭의 데이터는 app_state(전체 JSON)와 따로 Supabase 테이블(wfh_days, weekly_reports)에 저장한다.
+   회원이 자기 기록을 직접 쓰고, 권한은 DB 보안 정책(RLS)이 확인한다 — supabase/migrations/20261021000000_wfh_weekly.sql
+   보기 전용 회원도 입력할 수 있도록 버튼·입력칸에는 view-ok 클래스를 붙인다. */
+
+function ymd(d){
+  return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
+}
+function todayYmd(){ return ymd(new Date()); }
+
+/* ---------------- 재택 (월간 달력) ---------------- */
+const wfh = { ym: null, days: null, loadedYm: null }; // ym은 처음 열 때 이번 달로 정한다(currentPeriod는 app.js에 있음), days: "YYYY-MM-DD" -> { journal }
+
+async function wfhLoad(){
+  const ym = wfh.ym;
+  const [y, m] = ym.split("-").map(Number);
+  const first = ym + "-01";
+  const last = ymd(new Date(y, m, 0));
+  const { data, error } = await sb.from("wfh_days").select("day,journal")
+    .eq("user_id", currentProfile.id).gte("day", first).lte("day", last);
+  if(error){ showToast("재택 일정을 불러오지 못했어요: " + error.message, { error: true }); return; }
+  if(ym !== wfh.ym) return; // 불러오는 사이 다른 달로 넘어갔다
+  wfh.days = {};
+  data.forEach(r => wfh.days[r.day] = { journal: r.journal || "" });
+  wfh.loadedYm = ym;
+  if(state.tab === "wfh") renderTabContent();
+}
+
+function wfhMove(delta){
+  wfh.ym = periodPlus(wfh.ym, delta);
+  wfh.days = null;
+  renderTabContent();
+}
+
+function renderWfhTab(){
+  if(!wfh.ym) wfh.ym = currentPeriod();
+  if(wfh.loadedYm !== wfh.ym || !wfh.days){
+    if(wfh.loadingYm !== wfh.ym){
+      const ym = wfh.loadingYm = wfh.ym;
+      wfhLoad().finally(() => { if(wfh.loadingYm === ym) wfh.loadingYm = null; });
+    }
+    return '<div class="card"><div class="empty">불러오는 중…</div></div>';
+  }
+  const [y, m] = wfh.ym.split("-").map(Number);
+  const startDow = new Date(y, m-1, 1).getDay();
+  const lastDay = new Date(y, m, 0).getDate();
+  const today = todayYmd();
+  const dows = ["일", "월", "화", "수", "목", "금", "토"];
+  let cells = "";
+  for(let i = 0; i < startDow; i++) cells += '<div></div>';
+  for(let d = 1; d <= lastDay; d++){
+    const key = wfh.ym + "-" + String(d).padStart(2,"0");
+    const rec = wfh.days[key];
+    const dow = (startDow + d - 1) % 7;
+    const isToday = key === today;
+    cells +=
+      '<div class="wfh-cell' + (rec ? ' on' : '') + (isToday ? ' today' : '') + (key < today ? ' past' : '') + '" onclick="wfhClick(\'' + key + '\')">' +
+        '<div class="wfh-num" style="' + (dow === 0 ? 'color:#D64550;' : dow === 6 ? 'color:#3E6FB0;' : '') + '">' + d + '</div>' +
+        (rec ? '<div class="wfh-tag">재택</div>' : '') +
+        (rec && rec.journal ? '<div class="wfh-tag journal">일지 ✓</div>' : '') +
+      '</div>';
+  }
+  const count = Object.keys(wfh.days).length;
+  return '<div class="card">' +
+    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">' +
+      '<button class="icon-round view-ok" onclick="wfhMove(-1)">' + icon('chevronLeft', 15) + '</button>' +
+      '<div style="font-weight:800;font-size:15px;">' + periodLabel(wfh.ym) + ' <span style="font-size:12px;color:#94A3B8;font-weight:600;">재택 ' + count + '일</span></div>' +
+      '<button class="icon-round view-ok" onclick="wfhMove(1)">' + icon('chevronRight', 15) + '</button>' +
+    '</div>' +
+    '<div class="wfh-grid">' +
+      dows.map((w, i) => '<div class="wfh-dow" style="' + (i === 0 ? 'color:#D64550;' : i === 6 ? 'color:#3E6FB0;' : '') + '">' + w + '</div>').join("") +
+      cells +
+    '</div>' +
+    '<div style="font-size:12px;color:#94A3B8;margin-top:12px;line-height:1.6;">' +
+      '날짜를 누르면 재택 예정으로 지정되고, 한 번 더 누르면 취소돼요. 재택 당일(또는 지난 재택일)을 누르면 업무 일지를 쓸 수 있어요.' +
+    '</div>' +
+  '</div>';
+}
+
+async function wfhClick(key){
+  const today = todayYmd();
+  const rec = wfh.days[key];
+  if(key <= today && rec){ wfhJournalOpen(key); return; }
+  if(key < today){ showToast("지난 날짜는 재택으로 지정할 수 없어요"); return; }
+  if(rec){
+    const { error } = await sb.from("wfh_days").delete().eq("user_id", currentProfile.id).eq("day", key);
+    if(error){ showToast("취소하지 못했어요: " + error.message, { error: true }); return; }
+    delete wfh.days[key];
+    showToast(key + " 재택 예정을 취소했어요");
+  }else{
+    const { error } = await sb.from("wfh_days").insert({ day: key });
+    if(error){ showToast("지정하지 못했어요: " + error.message, { error: true }); return; }
+    wfh.days[key] = { journal: "" };
+    showToast(key + " 재택 예정으로 지정했어요");
+  }
+  renderTabContent();
+  if(key === today && wfh.days[key]) wfhJournalOpen(key); // 당일에 지정하면 바로 일지 작성
+}
+
+function wfhJournalOpen(key){
+  const rec = wfh.days[key];
+  showModal(
+    '<div style="font-weight:800;font-size:14px;margin-bottom:4px;">업무 일지</div>' +
+    '<div style="font-size:12px;color:#94A3B8;margin-bottom:10px;">' + key + ' 재택근무</div>' +
+    '<textarea id="wfh-journal" class="input" rows="10" style="resize:vertical;line-height:1.5;" placeholder="오늘 한 업무를 적어 주세요">' + esc(rec.journal) + '</textarea>' +
+    '<div style="display:flex;gap:8px;margin-top:12px;">' +
+      (key === todayYmd() ? '<button class="add-btn" style="background:#fff;color:#B91C1C;border:1px solid #F3B8B8;" onclick="wfhCancelToday(\'' + key + '\')">재택 취소</button>' : '') +
+      '<button class="add-btn" style="flex:1;justify-content:center;background:#fff;color:#475569;border:1px solid var(--border);" onclick="closeModal()">닫기</button>' +
+      '<button class="add-btn" style="flex:1;justify-content:center;" onclick="wfhJournalSave(\'' + key + '\')">저장</button>' +
+    '</div>'
+  );
+  setTimeout(() => { const el = document.getElementById("wfh-journal"); if(el) el.focus(); }, 50);
+}
+
+async function wfhJournalSave(key){
+  const journal = document.getElementById("wfh-journal").value;
+  const { error } = await sb.from("wfh_days").update({ journal, updated_at: new Date().toISOString() })
+    .eq("user_id", currentProfile.id).eq("day", key);
+  if(error){ showToast("저장하지 못했어요: " + error.message, { error: true }); return; }
+  wfh.days[key].journal = journal;
+  closeModal();
+  showToast("업무 일지를 저장했어요");
+  renderTabContent();
+}
+
+async function wfhCancelToday(key, confirmed){
+  if(wfh.days[key].journal && !confirmed){
+    showModal(
+      '<div style="font-weight:800;font-size:14px;margin-bottom:8px;">재택 취소</div>' +
+      '<div style="font-size:12.5px;color:#475569;line-height:1.6;margin-bottom:16px;">작성한 업무 일지도 함께 지워져요. 재택을 취소할까요?</div>' +
+      '<div style="display:flex;gap:8px;">' +
+        '<button class="add-btn" style="flex:1;justify-content:center;background:#fff;color:#475569;border:1px solid var(--border);" onclick="wfhJournalOpen(\'' + key + '\')">돌아가기</button>' +
+        '<button class="add-btn" style="flex:1;justify-content:center;background:var(--danger);" onclick="wfhCancelToday(\'' + key + '\', true)">재택 취소</button>' +
+      '</div>'
+    );
+    return;
+  }
+  const { error } = await sb.from("wfh_days").delete().eq("user_id", currentProfile.id).eq("day", key);
+  if(error){ showToast("취소하지 못했어요: " + error.message, { error: true }); return; }
+  delete wfh.days[key];
+  closeModal();
+  showToast(key + " 재택을 취소했어요");
+  renderTabContent();
+}
+
+/* ---------------- 주간보고 (방문 로그) ---------------- */
+const WEEKLY_COLS = [
+  { key: "visit_date", label: "날짜" },
+  { key: "task_name", label: "과제명" },
+  { key: "visit_place", label: "방문처" },
+  { key: "region", label: "지역" },
+  { key: "pi_name", label: "PI명" },
+  { key: "reason", label: "방문사유" },
+  { key: "visitor", label: "방문자" },
+];
+const weekly = { rows: null, selected: {} }; // selected: id -> true
+
+async function weeklyLoad(){
+  const { data, error } = await sb.from("weekly_reports").select("*")
+    .order("visit_date", { ascending: false }).order("created_at", { ascending: false });
+  if(error){ showToast("주간보고를 불러오지 못했어요: " + error.message, { error: true }); return; }
+  weekly.rows = data;
+  if(state.tab === "weekly") renderTabContent();
+}
+
+function renderWeeklyTab(){
+  if(!weekly.rows){
+    if(!weekly.loading){ weekly.loading = true; weeklyLoad().finally(() => { weekly.loading = false; }); }
+    return '<div class="card"><div class="empty">불러오는 중…</div></div>';
+  }
+  const inp = (key, label, type, ph, val) =>
+    '<div><div class="field-label">' + label + '</div>' +
+    '<input id="wk-' + key + '" class="input view-ok" type="' + type + '" placeholder="' + ph + '" value="' + esc(val || "") + '"/></div>';
+  const form = '<div class="card">' +
+    '<div style="font-weight:800;font-size:14px;margin-bottom:12px;">방문 기록 추가</div>' +
+    '<div class="wk-form">' +
+      inp("visit_date", "날짜", "date", "", todayYmd()) +
+      inp("task_name", "과제명", "text", "예: OO 시판후조사", "") +
+      inp("visit_place", "방문처", "text", "예: OO대학교병원", "") +
+      inp("region", "지역", "text", "예: 서울", "") +
+      inp("pi_name", "PI명", "text", "예: 홍길동 교수", "") +
+      inp("reason", "방문사유", "text", "예: SIV", "") +
+      inp("visitor", "방문자", "text", "", currentProfile ? currentProfile.name : "") +
+    '</div>' +
+    '<div style="display:flex;justify-content:flex-end;margin-top:12px;">' +
+      '<button class="add-btn view-ok" id="wk-add" onclick="weeklyAdd()">' + icon('plus', 13) + ' 추가</button>' +
+    '</div>' +
+  '</div>';
+
+  const rows = weekly.rows;
+  const selCount = rows.filter(r => weekly.selected[r.id]).length;
+  const allOn = rows.length > 0 && selCount === rows.length;
+  const canDelete = (r) => isAdmin() || (currentProfile && r.user_id === currentProfile.id);
+  const table = rows.length === 0 ? '<div class="empty">아직 기록이 없어요. 위에서 방문 기록을 추가해 주세요.</div>' :
+    '<div style="overflow-x:auto;"><table>' +
+      '<thead><tr>' +
+        '<th style="width:32px;"><input type="checkbox" class="view-ok" ' + (allOn ? 'checked' : '') + ' onclick="weeklySelectAll(this.checked)"/></th>' +
+        WEEKLY_COLS.map(c => '<th>' + c.label + '</th>').join("") + '<th></th>' +
+      '</tr></thead><tbody>' +
+      rows.map(r => {
+        const on = !!weekly.selected[r.id];
+        return '<tr style="cursor:pointer;' + (on ? 'background:#E5F1F1;' : '') + '" onclick="weeklyToggle(\'' + r.id + '\')">' +
+          '<td><input type="checkbox" class="view-ok" ' + (on ? 'checked' : '') + ' style="pointer-events:none;"/></td>' +
+          WEEKLY_COLS.map(c => '<td' + (c.key === "reason" ? ' style="white-space:normal;min-width:140px;text-align:left;"' : '') + '>' + esc(r[c.key]) + '</td>').join("") +
+          '<td>' + (canDelete(r) ? '<button class="icon-btn view-ok" title="삭제" onclick="event.stopPropagation();weeklyDeleteConfirm(\'' + r.id + '\')">' + icon('trash', 14) + '</button>' : '') + '</td>' +
+        '</tr>';
+      }).join("") +
+    '</tbody></table></div>';
+
+  return '<div class="stack">' + form +
+    '<div class="card">' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px;">' +
+        '<div style="font-weight:800;font-size:14px;">방문 로그 <span style="font-size:12px;color:#94A3B8;font-weight:600;">' + rows.length + '건 · 행을 눌러 선택</span></div>' +
+        '<button class="btn-export view-ok" onclick="weeklyExport()"' + (selCount === 0 ? ' disabled style="opacity:0.4;"' : '') + '>' + icon('download', 14) + ' 선택 ' + selCount + '건 엑셀 다운로드</button>' +
+      '</div>' +
+      table +
+    '</div>' +
+  '</div>';
+}
+
+async function weeklyAdd(){
+  const rec = {};
+  WEEKLY_COLS.forEach(c => rec[c.key] = document.getElementById("wk-" + c.key).value.trim());
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(rec.visit_date)){ showToast("날짜를 YYYY-MM-DD 형식으로 입력해 주세요", { error: true }); return; }
+  if(!rec.task_name && !rec.visit_place){ showToast("과제명이나 방문처를 입력해 주세요", { error: true }); return; }
+  const btn = document.getElementById("wk-add");
+  if(btn) btn.disabled = true;
+  const { error } = await sb.from("weekly_reports").insert(rec);
+  if(btn) btn.disabled = false;
+  if(error){ showToast("추가하지 못했어요: " + error.message, { error: true }); return; }
+  showToast("방문 기록을 추가했어요");
+  weekly.rows = null; // 다시 불러와서 정렬 순서대로 보여준다
+  renderTabContent();
+}
+
+function weeklyToggle(id){
+  if(weekly.selected[id]) delete weekly.selected[id]; else weekly.selected[id] = true;
+  renderTabContent();
+}
+function weeklySelectAll(on){
+  weekly.selected = {};
+  if(on) weekly.rows.forEach(r => weekly.selected[r.id] = true);
+  renderTabContent();
+}
+
+function weeklyDeleteConfirm(id){
+  const r = weekly.rows.find(x => x.id === id);
+  if(!r) return;
+  showModal(
+    '<div style="font-weight:800;font-size:14px;margin-bottom:8px;">방문 기록 삭제</div>' +
+    '<div style="font-size:12.5px;color:#475569;line-height:1.6;margin-bottom:16px;">' + esc(r.visit_date) + ' · ' + esc(r.task_name || r.visit_place) + ' 기록을 삭제할까요? 되돌릴 수 없어요.</div>' +
+    '<div style="display:flex;gap:8px;">' +
+      '<button class="add-btn" style="flex:1;justify-content:center;background:#fff;color:#475569;border:1px solid var(--border);" onclick="closeModal()">취소</button>' +
+      '<button class="add-btn" style="flex:1;justify-content:center;background:var(--danger);" onclick="weeklyDelete(\'' + id + '\')">삭제</button>' +
+    '</div>'
+  );
+}
+async function weeklyDelete(id){
+  const { error } = await sb.from("weekly_reports").delete().eq("id", id);
+  closeModal();
+  if(error){ showToast("삭제하지 못했어요: " + error.message, { error: true }); return; }
+  weekly.rows = weekly.rows.filter(r => r.id !== id);
+  delete weekly.selected[id];
+  showToast("삭제했어요");
+  renderTabContent();
+}
+
+async function weeklyExport(){
+  const picked = weekly.rows.filter(r => weekly.selected[r.id]);
+  if(picked.length === 0) return;
+  const data = picked.map(r => {
+    const row = {};
+    WEEKLY_COLS.forEach(c => row[c.label] = r[c.key]);
+    return row;
+  });
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), "주간보고");
+  const xlsxData = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+  await saveFileToViewer("주간보고_" + todayYmd() + ".xlsx", xlsxData, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+}
+
+// 로그아웃할 때 다른 사람이 이어서 로그인해도 이전 계정의 기록이 보이지 않게 비운다.
+function worklogReset(){
+  wfh.ym = null; wfh.days = null; wfh.loadedYm = null;
+  weekly.rows = null; weekly.selected = {};
+}
