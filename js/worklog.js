@@ -278,7 +278,7 @@ function renderWeeklyTab(){
   const rows = weekly.rows;
   const selCount = rows.filter(r => weekly.selected[r.id]).length;
   const allOn = rows.length > 0 && selCount === rows.length;
-  const canDelete = (r) => isAdmin() || (currentProfile && r.user_id === currentProfile.id);
+  const canEdit = (r) => isAdmin() || (currentProfile && r.user_id === currentProfile.id); // 수정·삭제 권한 (DB 정책과 같은 기준)
   const table = rows.length === 0 ? '<div class="empty">아직 기록이 없어요. 위에서 방문 기록을 추가해 주세요.</div>' :
     '<div style="overflow-x:auto;"><table>' +
       '<thead><tr>' +
@@ -290,7 +290,11 @@ function renderWeeklyTab(){
         return '<tr style="cursor:pointer;' + (on ? 'background:#E5F1F1;' : '') + '" onclick="weeklyToggle(\'' + r.id + '\')">' +
           '<td><input type="checkbox" class="view-ok" ' + (on ? 'checked' : '') + ' style="pointer-events:none;"/></td>' +
           WEEKLY_COLS.map(c => '<td' + (c.key === "reason" ? ' style="white-space:normal;min-width:140px;text-align:left;"' : '') + '>' + esc(r[c.key]) + '</td>').join("") +
-          '<td>' + (canDelete(r) ? '<button class="icon-btn view-ok" title="삭제" onclick="event.stopPropagation();weeklyDeleteConfirm(\'' + r.id + '\')">' + icon('trash', 14) + '</button>' : '') + '</td>' +
+          '<td>' + (canEdit(r) ?
+            '<div style="display:flex;gap:6px;justify-content:center;">' +
+              '<button class="icon-btn view-ok" title="수정" style="color:#64748B;" onclick="event.stopPropagation();weeklyEditOpen(\'' + r.id + '\')">' + icon('edit', 14) + '</button>' +
+              '<button class="icon-btn view-ok" title="삭제" onclick="event.stopPropagation();weeklyDeleteConfirm(\'' + r.id + '\')">' + icon('trash', 14) + '</button>' +
+            '</div>' : '') + '</td>' +
         '</tr>';
       }).join("") +
     '</tbody></table></div>';
@@ -318,6 +322,41 @@ async function weeklyAdd(){
   if(error){ showToast("추가하지 못했어요: " + error.message, { error: true }); return; }
   showToast("방문 기록을 추가했어요");
   weekly.rows = null; // 다시 불러와서 정렬 순서대로 보여준다
+  renderTabContent();
+}
+
+function weeklyEditOpen(id){
+  const r = weekly.rows.find(x => x.id === id);
+  if(!r) return;
+  showModal(
+    '<div style="font-weight:800;font-size:14px;margin-bottom:12px;">방문 기록 수정</div>' +
+    '<div style="max-height:60vh;overflow-y:auto;">' +
+      WEEKLY_COLS.map(c =>
+        '<div class="field"><div class="field-label">' + c.label + '</div>' +
+        '<input id="wke-' + c.key + '" class="input" type="' + (c.key === "visit_date" ? "date" : "text") + '" value="' + esc(r[c.key]) + '"/></div>'
+      ).join("") +
+    '</div>' +
+    '<div style="display:flex;gap:8px;margin-top:6px;">' +
+      '<button class="add-btn" style="flex:1;justify-content:center;background:#fff;color:#475569;border:1px solid var(--border);" onclick="closeModal()">취소</button>' +
+      '<button class="add-btn" id="wke-save" style="flex:1;justify-content:center;" onclick="weeklyEditSave(\'' + id + '\')">저장</button>' +
+    '</div>'
+  );
+}
+async function weeklyEditSave(id){
+  const rec = {};
+  WEEKLY_COLS.forEach(c => rec[c.key] = document.getElementById("wke-" + c.key).value.trim());
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(rec.visit_date)){ showToast("날짜를 YYYY-MM-DD 형식으로 입력해 주세요", { error: true }); return; }
+  if(!rec.task_name && !rec.visit_place){ showToast("과제명이나 방문처를 입력해 주세요", { error: true }); return; }
+  const btn = document.getElementById("wke-save");
+  if(btn) btn.disabled = true;
+  // 권한이 없으면 오류 없이 0건이 바뀌므로, 바뀐 행을 돌려받아 확인한다
+  const { data, error } = await sb.from("weekly_reports").update(rec).eq("id", id).select("id");
+  if(btn) btn.disabled = false;
+  if(error){ showToast("수정하지 못했어요: " + error.message, { error: true }); return; }
+  if(!data || data.length === 0){ showToast("이 기록을 수정할 권한이 없어요", { error: true }); return; }
+  closeModal();
+  showToast("방문 기록을 수정했어요");
+  weekly.rows = null; // 날짜가 바뀌면 순서도 바뀌므로 다시 불러온다
   renderTabContent();
 }
 
