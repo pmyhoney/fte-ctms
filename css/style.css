@@ -104,3 +104,5 @@ body.save-blocked #tabcontent input:not(.view-ok){pointer-events:none;background
 .wfh-tag.journal{background:#fff;color:var(--accent);border:1px solid var(--accent);}
 .wk-form{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;}
 .wfh-name{font-size:10.5px;color:#475569;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.wfh-name.click{cursor:pointer;border-radius:4px;}
+.wfh-name.click:hover{background:#fff;color:var(--accent);text-decoration:underline;}
