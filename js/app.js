@@ -755,7 +755,7 @@ function renderHeader(){
   const roleBadge = '<div style="display:flex;align-items:center;gap:6px;">' +
     '<span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;' +
       (isAdmin() ? 'background:#E5F1F1;color:var(--accent);' : 'background:#F1F5F9;color:#64748B;') + '">' +
-      (isAdmin() ? '관리자' : '회원') +
+      (isAdmin() ? '관리자' : canWrite() ? '회원' : '뷰어') +
     '</span>' +
     '<span style="font-size:12px;font-weight:700;color:#475569;">' + esc(currentProfile ? currentProfile.name || currentProfile.login_id : '') + '</span>' +
     '<button onclick="logout()" style="font-size:11px;color:#94A3B8;background:none;border:none;text-decoration:underline;">로그아웃</button>' +
@@ -783,13 +783,13 @@ function renderTabBar(){
   const items = [
     { id: "fte", label: "FTE 관리", icon: "dashboard" },
     { id: "ctms", label: "CTMS", icon: "clipboard" },
-    { id: "wfh", label: "재택", icon: "calendar" },
+    { id: "wfh", label: "재택", icon: "calendar", writerOnly: true }, // 뷰어는 본인 재택 기록이 없으므로 숨김
     { id: "weekly", label: "주간보고", icon: "edit" },
     { id: "training", label: "교육", icon: "book" },
     { id: "members", label: "팀원 관리", icon: "users", adminOnly: true },
     { id: "types", label: "과제 유형", icon: "list", adminOnly: true },
     { id: "products", label: "품목 관리", icon: "box", adminOnly: true },
-  ].filter(it => !it.adminOnly || isAdmin());
+  ].filter(it => (!it.adminOnly || isAdmin()) && (!it.writerOnly || canWrite()));
   document.getElementById("tabbar").innerHTML =
     '<div class="tabbar">' +
     items.map(it =>
@@ -1767,23 +1767,33 @@ function profilesSectionHtml(){
   let html = '<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">' +
     '<div style="font-size:13px;font-weight:700;color:#475569;">회원 승인 ('+profilesCache.length+'명'+(pending ? ' · <span style="color:#B45309;">대기 '+pending+'명</span>' : '')+')</div>' +
     '<button class="icon-round" title="새로고침" onclick="profilesCache=null;renderTabContent()">'+icon('refresh',13)+'</button></div>' +
-    '<div style="font-size:12px;color:#94A3B8;margin-bottom:12px;">승인해야 데이터가 보여요. 팀원을 연결하면 CTMS에서 본인 담당 과제를 입력할 수 있어요.</div>';
+    '<div style="font-size:12px;color:#94A3B8;margin-bottom:12px;">승인해야 데이터가 보여요. 팀원을 연결하면 CTMS에서 본인 담당 과제를 입력할 수 있어요. 뷰어는 팀원 연결 없이 조회만 할 수 있어요.</div>';
   html += profilesCache.map(p => {
     const isMe = currentProfile && p.id === currentProfile.id;
+    const isViewer = p.role === "viewer";
     const tag = p.role === "admin"
       ? '<span class="line-tag" style="background:#E5F1F1;color:var(--accent);">관리자</span>'
-      : (p.approved ? '<span class="line-tag" style="background:#E7F6EC;color:#16A34A;">승인됨</span>'
-                    : '<span class="line-tag" style="background:#FEF3E2;color:#B45309;">승인 대기</span>');
+      : !p.approved ? '<span class="line-tag" style="background:#FEF3E2;color:#B45309;">승인 대기</span>'
+      : isViewer ? '<span class="line-tag" style="background:#F1F5F9;color:#64748B;">뷰어</span>'
+      : '<span class="line-tag" style="background:#E7F6EC;color:#16A34A;">승인됨</span>';
+    // 뷰어 ↔ 일반 회원 전환 (승인된 일반·뷰어 회원만). 뷰어로 바꾸면 팀원 연결도 끊는다.
+    const roleSel = (p.approved && p.role !== "admin" && !isMe)
+      ? '<select class="input" style="width:110px;padding:6px 8px;font-size:12.5px;" onchange="updateProfile(\''+p.id+'\', this.value === \'viewer\' ? { role: \'viewer\', member_id: null } : { role: \'member\' })">' +
+          '<option value="member"'+(isViewer ? '' : ' selected')+'>일반 회원</option><option value="viewer"'+(isViewer ? ' selected' : '')+'>뷰어</option></select>'
+      : '';
     return '<div class="list-row">' +
       '<div style="display:flex;align-items:center;gap:8px;min-width:150px;">' + tag +
         '<span style="font-size:13px;font-weight:700;">'+esc(p.name)+'</span>' +
         '<span style="font-size:12px;color:#94A3B8;">'+esc(p.login_id)+'</span></div>' +
       '<div style="display:flex;align-items:center;gap:8px;">' +
+        roleSel +
+        (isViewer ? '' :
         '<select class="input" style="width:150px;padding:6px 8px;font-size:12.5px;" onchange="updateProfile(\''+p.id+'\', { member_id: this.value || null })">' +
           '<option value="">팀원 연결 안 함</option>' +
           state.members.map(m => '<option value="'+m.id+'"'+(p.member_id === m.id ? ' selected' : '')+'>'+esc(m.name)+'</option>').join("") +
-        '</select>' +
+        '</select>') +
         (isMe ? '' : '<button class="add-btn" style="padding:6px 12px;'+(p.approved ? 'background:#fff;color:#475569;border:1px solid var(--border);' : '')+'" onclick="updateProfile(\''+p.id+'\', { approved: '+(!p.approved)+' })">'+(p.approved ? '승인 취소' : '승인')+'</button>') +
+        (!p.approved && !isMe ? '<button class="add-btn" style="padding:6px 12px;background:#fff;color:var(--accent);border:1px solid var(--accent);" onclick="updateProfile(\''+p.id+'\', { approved: true, role: \'viewer\', member_id: null })">뷰어로 승인</button>' : '') +
       '</div></div>';
   }).join("");
   html += '</div>';

@@ -7,6 +7,8 @@ function ymd(d){
   return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
 }
 function todayYmd(){ return ymd(new Date()); }
+// 뷰어는 조회만 가능 (DB의 can_write 정책과 같은 기준)
+function canWrite(){ return !!currentProfile && currentProfile.role !== "viewer"; }
 
 /* ---------------- 재택 (월간 달력) ---------------- */
 // ym은 처음 열 때 이번 달로 정한다(currentPeriod는 app.js에 있음)
@@ -278,7 +280,7 @@ function renderWeeklyTab(){
   const rows = weekly.rows;
   const selCount = rows.filter(r => weekly.selected[r.id]).length;
   const allOn = rows.length > 0 && selCount === rows.length;
-  const canEdit = (r) => isAdmin() || (currentProfile && r.user_id === currentProfile.id); // 수정·삭제 권한 (DB 정책과 같은 기준)
+  const canEdit = (r) => isAdmin() || (canWrite() && r.user_id === currentProfile.id); // 수정·삭제 권한 (DB 정책과 같은 기준)
   const table = rows.length === 0 ? '<div class="empty">아직 기록이 없어요. 위에서 방문 기록을 추가해 주세요.</div>' :
     '<div style="overflow-x:auto;"><table>' +
       '<thead><tr>' +
@@ -299,7 +301,7 @@ function renderWeeklyTab(){
       }).join("") +
     '</tbody></table></div>';
 
-  return '<div class="stack">' + form +
+  return '<div class="stack">' + (canWrite() ? form : '') +
     '<div class="card">' +
       '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px;">' +
         '<div style="font-weight:800;font-size:14px;">방문 로그 <span style="font-size:12px;color:#94A3B8;font-weight:600;">' + rows.length + '건 · 행을 눌러 선택</span></div>' +
@@ -409,20 +411,24 @@ async function weeklyExport(){
 /* ---------------- 교육 이력 ---------------- */
 const TX_LABEL = { none: "–", na: "전달 불필요", todo: "미계획", plan: "계획", done: "완료" };
 const TX_COLOR = { none: "#94A3B8", na: "#94A3B8", todo: "#B45309", plan: "#1F5C8C", done: "#1E7A4F" };
-const training = { rows: null, f: { member: "", scope: "", type: "", tx: "", q: "" } };
+const training = { rows: null, f: { member: "", scope: "", type: "", tx: "", q: "" }, view: "list", sessions: null };
 
 function trTx(r){ // 팀내 전달교육 상태 (사외 교육만 해당)
   if(r.scope !== "사외") return "none";
   if(!r.tx_need) return "na";
   return r.tx_status || "todo";
 }
-const trCanEdit = (r) => isAdmin() || (currentProfile && r.user_id === currentProfile.id); // DB 정책과 같은 기준
+const trCanEdit = (r) => isAdmin() || (canWrite() && r.user_id === currentProfile.id); // DB 정책과 같은 기준
 
 async function trainingLoad(){
-  const { data, error } = await sb.from("trainings").select("*")
-    .order("edu_date", { ascending: false }).order("created_at", { ascending: false });
+  const [tr, tx] = await Promise.all([
+    sb.from("trainings").select("*").order("edu_date", { ascending: false }).order("created_at", { ascending: false }),
+    sb.from("tx_sessions").select("*").order("session_date", { ascending: false }).order("created_at", { ascending: false }),
+  ]);
+  const error = tr.error || tx.error;
   if(error){ showToast("교육 이력을 불러오지 못했어요: " + error.message, { error: true }); return; }
-  training.rows = data;
+  training.rows = tr.data;
+  training.sessions = tx.data;
   if(state.tab === "training") renderTabContent();
 }
 
@@ -450,13 +456,16 @@ function renderTrainingTab(){
       stat("사내 / 사외", (rows.length - out.length) + " / " + out.length) +
       stat("전달교육 미계획 (사외)", out.filter(r => trTx(r) === "todo").length + "건", true) +
       stat("전달교육 계획 · 완료", out.filter(r => trTx(r) === "plan").length + " · " + out.filter(r => trTx(r) === "done").length) +
+      '<div class="tr-stat click' + (training.view === "tx" ? ' on' : '') + '" onclick="trainingView(\'' + (training.view === "tx" ? 'list' : 'tx') + '\')">' +
+        '<div class="k">팀내 전달교육 현황 ›</div><div class="v">' + training.sessions.length + '건</div></div>' +
     '</div>' +
+    (training.view === "tx" ? txSessionsHtml() :
     '<div class="card">' +
       '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px;">' +
         '<div style="font-weight:800;font-size:14px;">교육 이력 <span id="tr-count" style="font-size:12px;color:#94A3B8;font-weight:600;">' + trainingFiltered().length + '건 표시</span></div>' +
         '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
           '<button class="btn-export view-ok" onclick="trainingExport()">' + icon('download', 14) + ' 엑셀 다운로드</button>' +
-          '<button class="add-btn view-ok" onclick="trainingEditOpen(null)">' + icon('plus', 13) + ' 교육 이력 등록</button>' +
+          (canWrite() ? '<button class="add-btn view-ok" onclick="trainingEditOpen(null)">' + icon('plus', 13) + ' 교육 이력 등록</button>' : '') +
         '</div>' +
       '</div>' +
       '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">' +
@@ -467,8 +476,100 @@ function renderTrainingTab(){
         '<input class="input view-ok" style="flex:1 1 180px;width:auto;" type="search" placeholder="교육명·주관·비고 검색" value="' + esc(f.q) + '" oninput="training.f.q=this.value;trainingRenderList()"/>' +
       '</div>' +
       '<div id="tr-list">' + trainingListHtml() + '</div>' +
-    '</div>' +
+    '</div>') +
   '</div>';
+}
+function trainingView(v){ training.view = v; renderTabContent(); }
+
+/* 팀내 전달교육 현황: 교육 이력(사외·전달 완료)에서 자동으로 생기거나 직접 등록 */
+function txSessionsHtml(){
+  const list = training.sessions;
+  const table = list.length === 0 ? '<div class="empty">아직 기록이 없어요. 교육 이력에서 사외 교육의 전달교육을 \'완료\'로 저장하면 자동으로 추가돼요.</div>' :
+    '<div style="overflow-x:auto;"><table>' +
+      '<thead><tr><th>시행일자</th><th>제목</th><th>교육자</th><th>참석자</th><th></th></tr></thead><tbody>' +
+      list.map(s => '<tr>' +
+        '<td>' + esc(s.session_date) + '</td>' +
+        '<td style="white-space:normal;min-width:180px;text-align:left;"><div style="font-weight:700;">' + esc(s.title) + '</div>' +
+          (s.training_id ? '<div style="font-size:11px;color:#94A3B8;">교육 이력 연동</div>' : '') + '</td>' +
+        '<td>' + esc(s.educator) + '</td>' +
+        '<td style="white-space:normal;min-width:160px;text-align:left;font-size:12.5px;">' + esc(s.attendees) + '</td>' +
+        '<td>' + (trCanEdit(s) ?
+          '<div style="display:flex;gap:6px;justify-content:center;">' +
+            '<button class="icon-btn view-ok" title="수정" style="color:#64748B;" onclick="txEditOpen(\'' + s.id + '\')">' + icon('edit', 14) + '</button>' +
+            '<button class="icon-btn view-ok" title="삭제" onclick="txDeleteConfirm(\'' + s.id + '\')">' + icon('trash', 14) + '</button>' +
+          '</div>' : '') + '</td>' +
+      '</tr>').join("") +
+    '</tbody></table></div>';
+  return '<div class="card">' +
+    '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px;">' +
+      '<div style="font-weight:800;font-size:14px;">팀내 전달교육 현황 <span style="font-size:12px;color:#94A3B8;font-weight:600;">' + list.length + '건</span></div>' +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
+        '<button class="btn-export view-ok" onclick="trainingView(\'list\')">' + icon('chevronLeft', 14) + ' 교육 이력으로</button>' +
+        (canWrite() ? '<button class="add-btn view-ok" onclick="txEditOpen(null)">' + icon('plus', 13) + ' 전달교육 등록</button>' : '') +
+      '</div>' +
+    '</div>' +
+    table +
+  '</div>';
+}
+
+function txEditOpen(id){
+  const s = id ? training.sessions.find(x => x.id === id) : null;
+  if(id && !s) return;
+  const v = (k, d) => esc(s ? s[k] : (d || ""));
+  const field = (label, inner) => '<div class="field"><div class="field-label">' + label + '</div>' + inner + '</div>';
+  showModal(
+    '<div style="font-weight:800;font-size:14px;margin-bottom:12px;">' + (s ? '전달교육 수정' : '전달교육 등록') + '</div>' +
+    (s && s.training_id ? '<div style="font-size:12px;color:#94A3B8;margin-bottom:10px;line-height:1.5;">교육 이력과 연동된 기록이에요. 교육 이력에서 실시일·교육명·팀원을 바꾸면 여기도 함께 바뀌어요.</div>' : '') +
+    field("시행일자 *", '<input id="txe-session_date" class="input" type="date" value="' + v("session_date", todayYmd()) + '"/>') +
+    field("제목 *", '<input id="txe-title" class="input" type="text" placeholder="예: ICH E6(R3) GCP 개정 내용 공유" value="' + v("title") + '"/>') +
+    field("교육자", '<input id="txe-educator" class="input" type="text" value="' + v("educator", currentProfile ? currentProfile.name : "") + '"/>') +
+    field("참석자", '<textarea id="txe-attendees" class="input" rows="2" placeholder="예: 이정선, 유미, 김나형">' + v("attendees") + '</textarea>') +
+    '<div style="display:flex;gap:8px;margin-top:6px;">' +
+      '<button class="add-btn" style="flex:1;justify-content:center;background:#fff;color:#475569;border:1px solid var(--border);" onclick="closeModal()">취소</button>' +
+      '<button class="add-btn" id="txe-save" style="flex:1;justify-content:center;" onclick="txSave(' + (s ? '\'' + s.id + '\'' : 'null') + ')">저장</button>' +
+    '</div>'
+  );
+}
+async function txSave(id){
+  const val = (k) => document.getElementById("txe-" + k).value.trim();
+  const rec = { session_date: val("session_date"), title: val("title"), educator: val("educator"), attendees: val("attendees"), updated_at: new Date().toISOString() };
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(rec.session_date)){ showToast("시행일자를 입력해 주세요", { error: true }); return; }
+  if(!rec.title){ showToast("제목을 입력해 주세요", { error: true }); return; }
+  const btn = document.getElementById("txe-save");
+  if(btn) btn.disabled = true;
+  // 권한이 없으면 오류 없이 0건이 바뀌므로, 바뀐 행을 돌려받아 확인한다
+  const { data, error } = id
+    ? await sb.from("tx_sessions").update(rec).eq("id", id).select("id")
+    : await sb.from("tx_sessions").insert(rec).select("id");
+  if(btn) btn.disabled = false;
+  if(error){ showToast("저장하지 못했어요: " + error.message, { error: true }); return; }
+  if(!data || data.length === 0){ showToast("이 기록을 수정할 권한이 없어요", { error: true }); return; }
+  closeModal();
+  showToast(id ? "전달교육 기록을 수정했어요" : "전달교육 기록을 등록했어요");
+  training.rows = null; // 시행일자 순서대로 다시 불러온다
+  renderTabContent();
+}
+function txDeleteConfirm(id){
+  const s = training.sessions.find(x => x.id === id);
+  if(!s) return;
+  showModal(
+    '<div style="font-weight:800;font-size:14px;margin-bottom:8px;">전달교육 기록 삭제</div>' +
+    '<div style="font-size:12.5px;color:#475569;line-height:1.6;margin-bottom:16px;">' + esc(s.session_date) + ' · ' + esc(s.title) + ' 기록을 삭제할까요? 되돌릴 수 없어요.' +
+      (s.training_id ? '<br/>교육 이력은 그대로 남아요.' : '') + '</div>' +
+    '<div style="display:flex;gap:8px;">' +
+      '<button class="add-btn" style="flex:1;justify-content:center;background:#fff;color:#475569;border:1px solid var(--border);" onclick="closeModal()">취소</button>' +
+      '<button class="add-btn" style="flex:1;justify-content:center;background:var(--danger);" onclick="txDelete(\'' + id + '\')">삭제</button>' +
+    '</div>'
+  );
+}
+async function txDelete(id){
+  const { data, error } = await sb.from("tx_sessions").delete().eq("id", id).select("id");
+  closeModal();
+  if(error){ showToast("삭제하지 못했어요: " + error.message, { error: true }); return; }
+  if(!data || data.length === 0){ showToast("이 기록을 삭제할 권한이 없어요", { error: true }); return; }
+  training.sessions = training.sessions.filter(s => s.id !== id);
+  showToast("삭제했어요");
+  renderTabContent();
 }
 
 function trainingListHtml(){
@@ -615,6 +716,7 @@ async function trainingDelete(id){
   if(error){ showToast("삭제하지 못했어요: " + error.message, { error: true }); return; }
   if(!data || data.length === 0){ showToast("이 기록을 삭제할 권한이 없어요", { error: true }); return; }
   training.rows = training.rows.filter(r => r.id !== id);
+  training.sessions = training.sessions.filter(s => s.training_id !== id); // DB에서도 연동 기록이 함께 지워진다
   showToast("삭제했어요");
   renderTabContent();
 }
@@ -637,5 +739,5 @@ async function trainingExport(){
 function worklogReset(){
   wfh.ym = null; wfh.days = null; wfh.others = {}; wfh.loadedYm = null; wfh.names = null;
   weekly.rows = null; weekly.selected = {};
-  training.rows = null; training.f = { member: "", scope: "", type: "", tx: "", q: "" };
+  training.rows = null; training.f = { member: "", scope: "", type: "", tx: "", q: "" }; training.view = "list"; training.sessions = null;
 }
