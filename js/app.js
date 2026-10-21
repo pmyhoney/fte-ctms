@@ -120,6 +120,7 @@ function icon(name, size){
     edit: '<path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
     refresh: '<path d="M21 12a9 9 0 0 1-9 9c-2.52 0-4.93-1-6.74-2.74L3 16"/><path d="M3 12a9 9 0 0 1 9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><polyline points="3 22 3 16 9 16"/><polyline points="21 2 21 8 15 8"/>',
     save: '<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>',
+    book: '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>',
   };
   return '<svg '+common+'>'+(paths[name]||'')+'</svg>';
 }
@@ -784,6 +785,7 @@ function renderTabBar(){
     { id: "ctms", label: "CTMS", icon: "clipboard" },
     { id: "wfh", label: "재택", icon: "calendar" },
     { id: "weekly", label: "주간보고", icon: "edit" },
+    { id: "training", label: "교육", icon: "book" },
     { id: "members", label: "팀원 관리", icon: "users", adminOnly: true },
     { id: "types", label: "과제 유형", icon: "list", adminOnly: true },
     { id: "products", label: "품목 관리", icon: "box", adminOnly: true },
@@ -853,6 +855,7 @@ function renderTabContent(){
   else if(state.tab === "ctms") el.innerHTML = renderCtmsTab();
   else if(state.tab === "wfh") el.innerHTML = renderWfhTab(); // worklog.js
   else if(state.tab === "weekly") el.innerHTML = renderWeeklyTab(); // worklog.js
+  else if(state.tab === "training") el.innerHTML = renderTrainingTab(); // worklog.js
   if(FTE_SUB_TABS.some(s => s.id === state.tab)) el.insertAdjacentHTML("afterbegin", fteSubTabBar());
   if(state.tab === "assign") wireAssignTab();
 }
