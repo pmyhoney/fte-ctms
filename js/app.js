@@ -1794,10 +1794,32 @@ function profilesSectionHtml(){
         '</select>') +
         (isMe ? '' : '<button class="add-btn" style="padding:6px 12px;'+(p.approved ? 'background:#fff;color:#475569;border:1px solid var(--border);' : '')+'" onclick="updateProfile(\''+p.id+'\', { approved: '+(!p.approved)+' })">'+(p.approved ? '승인 취소' : '승인')+'</button>') +
         (!p.approved && !isMe ? '<button class="add-btn" style="padding:6px 12px;background:#fff;color:var(--accent);border:1px solid var(--accent);" onclick="updateProfile(\''+p.id+'\', { approved: true, role: \'viewer\', member_id: null })">뷰어로 승인</button>' : '') +
+        (!isMe && p.role !== "admin" ? '<button class="icon-btn" title="회원 삭제" onclick="deleteProfileConfirm(\''+p.id+'\')">'+icon('trash',14)+'</button>' : '') +
       '</div></div>';
   }).join("");
   html += '</div>';
   return html;
+}
+function deleteProfileConfirm(id){
+  const p = profilesCache.find(x => x.id === id);
+  if(!p) return;
+  showModal(
+    '<div style="font-weight:800;font-size:14px;margin-bottom:8px;color:var(--danger);">회원 삭제</div>' +
+    '<div style="font-size:12.5px;color:#475569;line-height:1.6;margin-bottom:16px;"><b>'+esc(p.name)+'</b>('+esc(p.login_id)+') 계정을 삭제할까요? 되돌릴 수 없어요.<br/>' +
+      '이 사람이 입력한 주간보고·교육 이력·전달교육 기록은 남고, 이후에는 관리자만 수정·삭제할 수 있어요. 재택 기록은 함께 삭제돼요.</div>' +
+    '<div style="display:flex;gap:8px;">' +
+      '<button class="add-btn" style="flex:1;justify-content:center;background:#fff;color:#475569;border:1px solid var(--border);" onclick="closeModal()">취소</button>' +
+      '<button class="add-btn" style="flex:1;justify-content:center;background:var(--danger);" onclick="deleteProfile(\''+id+'\')">삭제</button>' +
+    '</div>'
+  );
+}
+async function deleteProfile(id){
+  const { error } = await sb.rpc("admin_delete_user", { p_id: id });
+  closeModal();
+  if(error){ showToast("회원을 삭제하지 못했어요: " + error.message, { error: true }); return; }
+  profilesCache = profilesCache.filter(p => p.id !== id);
+  showToast("회원을 삭제했어요");
+  renderTabContent();
 }
 async function updateProfile(id, patch){
   const { error } = await sb.from("profiles").update(patch).eq("id", id);
