@@ -11,7 +11,7 @@ const IIT_STATUS_META = {
 };
 const IIT_PUB = ["미진행", "진행", "완료"];
 const IIT_PUB_COLOR = { "미진행": "#94A3B8", "진행": "#B45309", "완료": "#1E7A4F" };
-const IIT_EMPTY_F = () => ({ q: "", product: "", status: "", pub: "", hidden: false });
+const IIT_EMPTY_F = () => ({ q: "", line: "", product: "", status: "", pub: "", hidden: false });
 const iit = { rows: null, f: IIT_EMPTY_F() };
 
 async function iitLoad(){
@@ -29,6 +29,14 @@ function iitReset(){ iit.rows = null; iit.f = IIT_EMPTY_F(); }
 // 과제 유형 이름이 IIT[SC]·IIT[PC]인 것만 (띄어쓰기·괄호 차이는 무시: "IIT SC"도 같은 유형)
 const IIT_TYPE_KEYS = ["IITSC", "IITPC"];
 function isIitTaskType(t){ return !!t && IIT_TYPE_KEYS.includes(String(t.name || "").toUpperCase().replace(/[^A-Z]/g, "")); }
+// 과제 구분: IIT[SC] → SC, IIT[PC] → PC
+const iitLineOf = (t) => isIitTaskType(t) ? String(t.name).toUpperCase().replace(/[^A-Z]/g, "").slice(3) : "";
+// 품목명 위에 SC·PC 구분 뱃지를 얹어 보여준다 (품목명은 일반 글씨)
+function iitProductHtml(r, size){
+  const line = r.line === "SC" || r.line === "PC" ? lineTagHtml(r.line) : ""; // app.js
+  return (line ? '<div style="line-height:1;margin-bottom:3px;">' + line + '</div>' : '') +
+    (r.product ? '<div style="font-size:' + (size || 13) + 'px;">' + esc(r.product) + '</div>' : (line ? '' : '<span style="color:#94A3B8;">–</span>'));
+}
 
 // 배정 과제 → 목록 항목 (공동 배정·인수인계 레코드는 groupId로 묶어 한 과제로), IIT 유형 과제만
 function iitAssignedProjects(){
@@ -40,13 +48,14 @@ function iitAssignedProjects(){
   return Object.keys(out).filter(gid => out[gid].some(a => isIitTaskType(tmap[a.taskTypeId]))).map(gid => {
     const list = out[gid].sort((x, y) => (x.startPeriod || "").localeCompare(y.startPeriod || ""));
     const last = list[list.length - 1], p = pmap[last.productId], t = tmap[last.taskTypeId];
+    const iitType = tmap[(list.slice().reverse().find(a => isIitTaskType(tmap[a.taskTypeId])) || last).taskTypeId];
     // 담당자는 이번 달에 실제로 수행 중인 사람만 (종료된 전 담당자 제외, 수행 중인 사람이 없으면 전체)
     const now = currentPeriod(), activeNow = list.filter(a => isActive(a, now));
     const names = [...new Set((activeNow.length ? activeNow : list).map(a => { const m = state.members.find(x => x.id === a.memberId); return m ? m.name : ""; }).filter(Boolean))];
     const ends = list.map(a => a.endPeriod);
     return {
       gid, product: p ? p.name : "", taskName: last.taskName || "", manager: names.join(", "),
-      type: t ? t.name : "", status: last.status || "",
+      type: t ? t.name : "", line: iitLineOf(iitType), status: last.status || "",
       period: (list[0].startPeriod || "") + " ~ " + (ends.some(e => !e) ? "진행중" : ends.sort().pop()),
     };
   });
@@ -63,7 +72,7 @@ function iitAllRows(){
     const r = byGid[a.gid], d = r ? r.data : {};
     return Object.assign({}, d, {
       key: "g:" + a.gid, id: r ? r.id : null, gid: a.gid, linked: true, hidden: !!(r && r.hidden),
-      product: a.product, taskName: a.taskName, manager: a.manager, type: a.type, period: a.period,
+      product: a.product, taskName: a.taskName, manager: a.manager, type: a.type, line: a.line, period: a.period,
       status: d.status || (IIT_STATUS.includes(a.status) ? a.status : ""), ownStatus: d.status || "", assignStatus: a.status,
     });
   });
@@ -84,6 +93,7 @@ function iitPapers(pub){
 function iitFiltered(all){
   const f = iit.f, q = f.q.trim().toLowerCase();
   return all.filter(r => !!r.hidden === f.hidden &&
+    (!f.line || r.line === f.line) &&
     (!f.product || (r.product || "") === f.product) &&
     (!f.status || (r.status || r.assignStatus || "") === f.status) &&
     (!f.pub || iitPubStatus(r) === f.pub) &&
@@ -121,6 +131,7 @@ function renderIitTab(){
       '</div>' +
       '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;">' +
         '<input id="iit-q" class="input view-ok" style="flex:1 1 200px;" placeholder="과제명·과제코드·기관·연구자·담당자 검색" value="' + esc(f.q) + '" oninput="iitFilter(\'q\', this.value)"/>' +
+        sel("line", [["", "SC·PC 전체"], ["SC", "SC"], ["PC", "PC"]]) +
         sel("product", [["", "품목 전체"]].concat(products.map(p => [p, p]))) +
         sel("status", [["", "진행 현황 전체"]].concat(IIT_STATUS.map(s => [s, s]))) +
         sel("pub", [["", "Publication 전체"]].concat(IIT_PUB.map(s => [s, s]))) +
@@ -174,7 +185,7 @@ function iitListHtml(list, total){
   return '<div style="overflow-x:auto;"><table>' +
     '<thead><tr><th>품목명</th><th>과제코드</th><th>과제명</th><th>기관명</th><th>연구자명</th><th>담당자</th><th>지원범위</th><th>진행 현황</th><th>Publication</th>' + (edit ? '<th></th>' : '') + '</tr></thead><tbody>' +
     list.map(r => '<tr class="iit-row" title="눌러서 상세 정보 보기" onclick="iitDetailOpen(\'' + r.key + '\')">' +
-      td(r.product ? '<span class="product-tag">' + esc(r.product) + '</span>' : dash(""), "white-space:nowrap;") +
+      td(iitProductHtml(r), "white-space:nowrap;") +
       td(dash(r.code), "white-space:nowrap;") +
       td('<div style="font-weight:700;">' + dash(r.taskName) + iitContractBadgeHtml(r) + '</div>' +
         (r.linked ? '<div style="font-size:11px;color:#94A3B8;">' + esc([r.type, r.period].filter(Boolean).join(" · ")) + '</div>' :
@@ -213,11 +224,12 @@ function iitEditOpen(key){
     '<div style="font-weight:800;font-size:14px;margin-bottom:12px;">' + (r ? 'IIT 과제 수정' : 'IIT 과제 추가') + '</div>' +
     '<div class="modal-scroll">' +
       (r && r.linked ?
-        '<div style="font-size:11.5px;color:#94A3B8;margin-bottom:8px;">품목명·과제명·담당자는 과제 배정에서 가져온 값이에요. 바꾸려면 과제 배정 탭에서 수정해 주세요.</div>' +
-        '<div class="wk-form" style="grid-template-columns:1fr 2fr;">' + field("품목명", fixed(r.product)) + field("과제명", fixed(r.taskName)) + '</div>' +
+        '<div style="font-size:11.5px;color:#94A3B8;margin-bottom:8px;">과제 구분·품목명·과제명·담당자는 과제 배정에서 가져온 값이에요. 바꾸려면 과제 배정 탭에서 수정해 주세요.</div>' +
+        '<div class="wk-form" style="grid-template-columns:110px 1fr 2fr;">' + field("과제 구분", fixed(r.line)) + field("품목명", fixed(r.product)) + field("과제명", fixed(r.taskName)) + '</div>' +
         field("담당자", fixed(r.manager))
       :
-        '<div class="wk-form" style="grid-template-columns:1fr 2fr;">' +
+        '<div class="wk-form" style="grid-template-columns:110px 1fr 2fr;">' +
+          field("과제 구분", '<select id="iit-line" class="input"><option value="">선택 안 함</option>' + ["SC", "PC"].map(x => '<option' + (r && r.line === x ? ' selected' : '') + '>' + x + '</option>').join("") + '</select>') +
           field("품목명", input("product", "예: 로제텔정").replace('/>', ' list="iit-product-list"/>') + '<datalist id="iit-product-list">' + products.map(x => '<option value="' + esc(x) + '">').join("") + '</datalist>') +
           field("과제명 *", input("taskName", "예: 로제텔정 시판 후 효과 연구")) +
         '</div>' +
@@ -304,8 +316,8 @@ async function iitSave(key){
   // 논문 정보는 '완료'일 때만 저장하고, 칸이 모두 빈 논문은 버린다
   if(pubStatus === "완료"){ iitPapersCollect(); data.pub.papers = iit.formPapers.filter(p => IIT_PAPER_KEYS.some(k => p[k])); }
   // 배정 과제는 배정에서 지워졌을 때도 알아볼 수 있게 그때의 품목·과제명·담당자를 함께 저장해 둔다
-  if(r && r.linked) Object.assign(data, { product: r.product, taskName: r.taskName, manager: r.manager });
-  else Object.assign(data, { product: val("product"), taskName: val("taskName"), manager: val("manager") });
+  if(r && r.linked) Object.assign(data, { line: r.line, product: r.product, taskName: r.taskName, manager: r.manager });
+  else Object.assign(data, { line: val("line"), product: val("product"), taskName: val("taskName"), manager: val("manager") });
   if(!data.taskName){ showToast("과제명을 입력해 주세요", { error: true }); return; }
   const badUrl = data.pub.papers ? iit.formPapers.findIndex(p => p.url && !iitSafeUrl(p.url)) : -1; // 화면의 논문 번호 그대로 알려준다
   if(badUrl >= 0){ showToast("논문 " + (badUrl + 1) + "의 웹 링크는 http:// 또는 https:// 주소로 입력해 주세요", { error: true }); return; }
@@ -369,7 +381,7 @@ function iitExportRows(list){
     const col = (k) => papers.map(p => p[k] || "").join("\n"); // 논문이 여러 편이면 셀 안에서 줄을 바꿔 순서대로
     const v = iitDetailView(r), f = v.fund, res = v.result, n = (x) => x === null ? "" : x;
     return {
-      "품목명": r.product || "", "과제코드": r.code || "", "과제명": r.taskName || "", "기관명": r.site || "", "연구자명": r.investigator || "",
+      "구분": r.line || "", "품목명": r.product || "", "과제코드": r.code || "", "과제명": r.taskName || "", "기관명": r.site || "", "연구자명": r.investigator || "",
       "담당자": r.manager || "", "과제 유형": r.type || "", "기간": r.period || "",
       "지원범위-IP": s.ip ? "O" : "", "지원범위-연구비": s.fund ? "O" : "", "지원범위-기타": s.etc ? (s.etcText || "O") : "",
       "진행 현황": r.status || r.assignStatus || "", "Publication": iitPubStatus(r),
@@ -381,7 +393,7 @@ function iitExportRows(list){
       "연구비 지급 완료(원)": f.na || !f.rounds.length ? "" : f.rounds.filter(x => x.paid).reduce((s, x) => s + (Number(x.amount) || 0), 0),
       "IP 제공 현황": [v.ip.status, v.ip.memo].filter(Boolean).join(" · "),
       "결과 수령": [res.csr ? "CSR" + (res.csrDate ? " " + res.csrDate : "") : "", res.ms ? "Manuscript" + (res.msDate ? " " + res.msDate : "") : ""].filter(Boolean).join(", "),
-      "구분": r.linked ? "과제 배정" : r.orphan ? "배정에서 삭제됨" : "직접 추가",
+      "등록 경로": r.linked ? "과제 배정" : r.orphan ? "배정에서 삭제됨" : "직접 추가",
     };
   });
 }
@@ -481,7 +493,7 @@ function iitDetailOpen(key){
   showModal(
     '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:10px;">' +
       '<div style="min-width:0;"><div style="font-weight:800;font-size:15px;">' + esc(r.taskName) + '</div>' +
-        '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:4px;">' + (r.product ? '<span class="product-tag">' + esc(r.product) + '</span>' : '') + iitStatusHtml(r) + '</div></div>' +
+        '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:4px;">' + (r.line === "SC" || r.line === "PC" ? lineTagHtml(r.line) : '') + (r.product ? '<span style="font-size:13px;color:#475569;">' + esc(r.product) + '</span>' : '') + iitStatusHtml(r) + '</div></div>' +
       (edit && !r.hidden ? '<button class="btn-export" style="flex:0 0 auto;" onclick="iitEditOpen(\'' + key + '\')">' + icon('edit', 13) + ' 기본 정보 수정</button>' : '') +
     '</div>' +
     '<div class="modal-scroll iitd-grid">' +
