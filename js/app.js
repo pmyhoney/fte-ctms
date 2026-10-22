@@ -67,12 +67,13 @@ function esc(s){
 }
 
 /* ---------------- modal (custom — native confirm/alert/prompt are unreliable inside sandboxed artifact iframes) ---------------- */
-function showModal(bodyHtml){
+// size: 생략하면 확인창 크기, "md"는 중간, "wide"는 입력 항목이 많은 팝업 (PC에서 넓게, 모바일에선 화면 폭에 맞춤)
+function showModal(bodyHtml, size){
   closeModal();
   const overlay = document.createElement("div");
   overlay.id = "modal-overlay";
-  overlay.className = "modal-overlay";
-  overlay.innerHTML = '<div class="modal-card">' + bodyHtml + '</div>';
+  overlay.className = "modal-overlay" + (size ? " " + size : "");
+  overlay.innerHTML = '<div class="modal-card' + (size ? " " + size : "") + '">' + bodyHtml + '</div>';
   overlay.addEventListener("click", (e) => { if(e.target === overlay) closeModal(); });
   document.body.appendChild(overlay);
 }

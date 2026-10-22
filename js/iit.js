@@ -211,7 +211,7 @@ function iitEditOpen(key){
   const products = [...new Set(state.products.map(x => x.name).concat(iitAllRows().map(x => x.product)).filter(Boolean))];
   showModal(
     '<div style="font-weight:800;font-size:14px;margin-bottom:12px;">' + (r ? 'IIT 과제 수정' : 'IIT 과제 추가') + '</div>' +
-    '<div style="max-height:66vh;overflow-y:auto;">' +
+    '<div class="modal-scroll">' +
       (r && r.linked ?
         '<div style="font-size:11.5px;color:#94A3B8;margin-bottom:8px;">품목명·과제명·담당자는 과제 배정에서 가져온 값이에요. 바꾸려면 과제 배정 탭에서 수정해 주세요.</div>' +
         '<div class="wk-form" style="grid-template-columns:1fr 2fr;">' + field("품목명", fixed(r.product)) + field("과제명", fixed(r.taskName)) + '</div>' +
@@ -241,7 +241,7 @@ function iitEditOpen(key){
     '<div style="display:flex;gap:8px;margin-top:6px;">' +
       '<button class="add-btn" style="flex:1;justify-content:center;background:#fff;color:#475569;border:1px solid var(--border);" onclick="closeModal()">취소</button>' +
       '<button class="add-btn" id="iit-save" style="flex:1;justify-content:center;" onclick="iitSave(' + (r ? '\'' + r.key + '\'' : 'null') + ')">저장</button>' +
-    '</div>'
+    '</div>', "wide"
   );
   iit.formPapers = iitPapers(p).map(x => Object.assign({}, x));
   if(iit.formPapers.length === 0) iit.formPapers.push({ journal: "", vol: "", title: "", url: "" });
@@ -453,7 +453,7 @@ function iitDetailOpen(key){
   const edit = canWrite(), ctmsEdit = iitCtmsCanEdit(r), v = iitDetailView(r);
   iit.detail = { key, rounds: v.fund.rounds.map(x => Object.assign({}, x)), edit };
   const dis = (on) => on ? '' : ' disabled';
-  const sec = (title, inner, note) => '<div style="border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:10px;">' +
+  const sec = (title, inner, note, full) => '<div class="iitd-sec' + (full ? ' full' : '') + '">' +
     '<div style="font-weight:800;font-size:13px;margin-bottom:8px;color:#1F2937;">' + title + (note ? ' <span style="font-weight:500;font-size:11px;color:#94A3B8;">' + note + '</span>' : '') + '</div>' + inner + '</div>';
   const field = (label, inner) => '<div class="field" style="margin-bottom:8px;"><div class="field-label">' + label + '</div>' + inner + '</div>';
   const info = (label, val) => '<div><div style="font-size:11px;color:#94A3B8;">' + label + '</div><div style="font-size:13px;font-weight:600;">' + val + '</div></div>';
@@ -480,14 +480,14 @@ function iitDetailOpen(key){
     '<input id="iitd-res-' + k + 'Date" class="input" type="date" style="flex:0 1 170px;" value="' + esc(res[k + "Date"] || "") + '"' + dis(edit) + ' title="수령일"/></div>';
   showModal(
     '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:10px;">' +
-      '<div><div style="font-weight:800;font-size:15px;">' + esc(r.taskName) + '</div>' +
+      '<div style="min-width:0;"><div style="font-weight:800;font-size:15px;">' + esc(r.taskName) + '</div>' +
         '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:4px;">' + (r.product ? '<span class="product-tag">' + esc(r.product) + '</span>' : '') + iitStatusHtml(r) + '</div></div>' +
       (edit && !r.hidden ? '<button class="btn-export" style="flex:0 0 auto;" onclick="iitEditOpen(\'' + key + '\')">' + icon('edit', 13) + ' 기본 정보 수정</button>' : '') +
     '</div>' +
-    '<div style="max-height:66vh;overflow-y:auto;padding-right:2px;">' +
-      sec("기본 정보", '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;">' +
+    '<div class="modal-scroll iitd-grid">' +
+      sec("기본 정보", '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;">' +
         info("과제코드", dash(r.code)) + info("기관명", dash(r.site)) + info("연구자명", dash(r.investigator)) + info("담당자", dash(r.manager)) +
-        info("지원범위", iitSupportHtml(r.support)) + (r.linked ? info("과제 유형 · 기간", dash([r.type, r.period].filter(Boolean).join(" · "))) : '') + '</div>') +
+        info("지원범위", iitSupportHtml(r.support)) + (r.linked ? info("과제 유형 · 기간", dash([r.type, r.period].filter(Boolean).join(" · "))) : '') + '</div>', '', true) +
       sec("일정 · 계약",
         '<div class="wk-form" style="grid-template-columns:1fr 1fr;">' +
           field("RRC 승인일", dateInput("rrcDate", v.rrc.date, r.linked ? ctmsEdit : edit) + ctmsHint(v.rrc.month)) +
@@ -506,18 +506,18 @@ function iitDetailOpen(key){
           (edit ? '<button class="add-btn" style="width:100%;justify-content:center;background:#fff;color:var(--accent);border:1px dashed var(--accent);margin-bottom:6px;" onclick="iitRoundAdd()">' + icon('plus', 13) + ' 차수 추가</button>' : '') +
           '<div id="iitd-roundsum" style="font-size:12px;font-weight:700;"></div>' +
           (cost.length ? '<div style="font-size:11px;color:#94A3B8;margin-top:6px;">CTMS 비용 기록(연구비): 계획 ' + costSum("plan").toLocaleString("ko-KR") + '천원 · 집행 ' + costSum("actual").toLocaleString("ko-KR") + '천원</div>' : '') +
-        '</div>') +
+        '</div>', '', true) +
       sec("IP 제공 현황", '<div class="wk-form" style="grid-template-columns:1fr 2fr;">' +
         field("상태", '<select id="iitd-ip-status" class="input"' + dis(edit) + '><option value="">선택 안 함</option>' + IIT_IP_STATUS.map(x => '<option' + (v.ip.status === x ? ' selected' : '') + '>' + x + '</option>').join("") + '</select>') +
         field("내용", '<input id="iitd-ip-memo" class="input" type="text" placeholder="예: 로제텔정 300T, 2026-03 1차 제공" value="' + esc(v.ip.memo) + '"' + dis(edit) + '/>') + '</div>') +
       sec("결과 수령", resRow("csr", "CSR") + resRow("ms", "Manuscript") +
         '<input id="iitd-res-memo" class="input" type="text" placeholder="메모 (예: 최종본 수령, 보관 위치)" value="' + esc(res.memo) + '"' + dis(edit) + '/>') +
-      sec("Publication", iitPubHtml(r), edit ? '수정은 \'기본 정보 수정\'에서' : '') +
+      sec("Publication", iitPubHtml(r), edit ? '수정은 \'기본 정보 수정\'에서' : '', true) +
     '</div>' +
     '<div style="display:flex;gap:8px;margin-top:10px;">' +
       '<button class="add-btn view-ok" style="flex:1;justify-content:center;background:#fff;color:#475569;border:1px solid var(--border);" onclick="closeModal()">닫기</button>' +
       (edit ? '<button class="add-btn" id="iitd-save" style="flex:1;justify-content:center;" onclick="iitDetailSave(\'' + key + '\')">저장</button>' : '') +
-    '</div>'
+    '</div>', "wide"
   );
   iitRoundsRender();
   iitFundSync();

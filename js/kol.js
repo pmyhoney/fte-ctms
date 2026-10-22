@@ -201,7 +201,7 @@ function kolEditOpen(id){
   const ev = p ? p.evaluation : null;
   showModal(
     '<div style="font-weight:800;font-size:14px;margin-bottom:12px;">' + (p ? 'KOL 수정' : 'KOL 추가') + '</div>' +
-    '<div style="max-height:64vh;overflow-y:auto;">' +
+    '<div class="modal-scroll">' +
       '<div class="wk-form" style="grid-template-columns:1fr 1fr;">' +
         field("성명 *", input("name", "예: 홍길동")) +
         field("하위 탭", '<select id="kole-cat" class="input">' + kol.cats.map(c => '<option value="' + c.id + '"' + ((p ? p.category_id : kol.cat) === c.id ? ' selected' : '') + '>' + esc(c.name) + '</option>').join("") + '</select>') +
@@ -225,7 +225,7 @@ function kolEditOpen(id){
     '<div style="display:flex;gap:8px;margin-top:6px;">' +
       '<button class="add-btn" style="flex:1;justify-content:center;background:#fff;color:#475569;border:1px solid var(--border);" onclick="closeModal()">취소</button>' +
       '<button class="add-btn" id="kole-save" style="flex:1;justify-content:center;" onclick="kolSave(' + (p ? p.id : 'null') + ')">저장</button>' +
-    '</div>'
+    '</div>', "wide"
   );
 }
 
@@ -433,7 +433,7 @@ function kolUploadOpen(){
       '<button class="add-btn" style="flex:1;justify-content:center;background:#fff;color:var(--accent);border:1px solid var(--accent);" onclick="kolTemplateDownload()">' + icon('download', 13) + ' 양식 받기</button>' +
       '<button class="add-btn" style="flex:1;justify-content:center;" onclick="document.getElementById(\'kolu-file\').click()">' + icon('upload', 13) + ' 파일 선택</button>' +
     '</div>' +
-    '<button class="add-btn" style="width:100%;justify-content:center;margin-top:8px;background:#fff;color:#475569;border:1px solid var(--border);" onclick="closeModal()">취소</button>'
+    '<button class="add-btn" style="width:100%;justify-content:center;margin-top:8px;background:#fff;color:#475569;border:1px solid var(--border);" onclick="closeModal()">취소</button>', "md"
   );
 }
 
@@ -510,7 +510,7 @@ async function kolUploadFile(input){
     '<div style="display:flex;gap:8px;margin-top:14px;">' +
       '<button class="add-btn" style="flex:1;justify-content:center;background:#fff;color:#475569;border:1px solid var(--border);" onclick="kolUploadOpen()">돌아가기</button>' +
       '<button class="add-btn" id="kolu-run" style="flex:1;justify-content:center;' + (total ? '' : 'opacity:.4;pointer-events:none;') + '" onclick="kolUploadRun()">' + total + '건 업로드</button>' +
-    '</div>'
+    '</div>', "wide"
   );
 }
 
