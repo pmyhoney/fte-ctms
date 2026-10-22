@@ -185,6 +185,10 @@ function fteForPeriod(a, period){
   }
   return a.fte;
 }
+// 팀장(members[].leader)은 과제 배정 대상이 아니므로 FTE 화면(배정 현황·과제 배정·과제 진행 현황·월별/분기별)과 FTE 엑셀에서 뺀다
+function isLeaderMember(id){ const m = state.members.find(x => x.id === id); return !!(m && m.leader); }
+function fteMembers(){ return state.members.filter(m => !m.leader); }
+function fteAssignments(){ return state.assignments.filter(a => !isLeaderMember(a.memberId)); }
 function memberFteAt(memberId, period, lineFilter, productFilter){
   const map = taskTypeById();
   return state.assignments
@@ -572,17 +576,87 @@ function confirmImportBackup(){
 }
 
 /* ---------------- excel export ---------------- */
-async function exportExcel(){
+// 엑셀 내보내기: 어떤 탭의 정보를 담을지 고르는 팝업 → 고른 탭마다 시트를 만든다
+const EXPORT_SECTIONS = [
+  { key: "fte", label: "FTE 관리" },
+  { key: "ctms", label: "CTMS" },
+  { key: "wfh", label: "재택", writerOnly: true }, // 뷰어는 재택 기록이 없으므로 숨김 (탭과 같은 기준)
+  { key: "weekly", label: "주간보고" },
+  { key: "training", label: "교육" },
+];
+function exportSections(){ return EXPORT_SECTIONS.filter(s => !s.writerOnly || canWrite()); }
+
+function exportExcelOpen(){
+  const box = (key, label, bold) =>
+    '<label style="display:flex;align-items:center;gap:8px;padding:9px 4px;font-size:13.5px;cursor:pointer;' + (bold ? 'font-weight:800;border-bottom:1px solid var(--border);margin-bottom:4px;' : '') + '">' +
+      '<input type="checkbox" id="xp-' + key + '" checked onchange="exportExcelSync(\'' + key + '\')"/> ' + label + '</label>';
+  showModal(
+    '<div style="font-weight:800;font-size:14px;margin-bottom:4px;">엑셀 내보내기</div>' +
+    '<div style="font-size:12px;color:#94A3B8;margin-bottom:10px;line-height:1.5;">내보낼 정보를 골라 주세요. 고른 항목마다 시트가 만들어져요.</div>' +
+    box("all", "전체", true) +
+    exportSections().map(s => box(s.key, s.label)).join("") +
+    '<div style="font-size:11.5px;color:#94A3B8;margin-top:8px;line-height:1.5;">재택·주간보고·교육은 기간 구분 없이 내가 볼 수 있는 기록 전체를 담아요.</div>' +
+    '<div style="display:flex;gap:8px;margin-top:14px;">' +
+      '<button class="add-btn" style="flex:1;justify-content:center;background:#fff;color:#475569;border:1px solid var(--border);" onclick="closeModal()">취소</button>' +
+      '<button class="add-btn" id="xp-go" style="flex:1;justify-content:center;" onclick="exportExcelRun()">' + icon('download', 13) + ' 내보내기</button>' +
+    '</div>'
+  );
+}
+// '전체'를 누르면 모두 켜고/끄고, 항목을 바꾸면 '전체' 표시를 맞춘다
+function exportExcelSync(key){
+  const keys = exportSections().map(s => s.key);
+  if(key === "all"){
+    const on = document.getElementById("xp-all").checked;
+    keys.forEach(k => document.getElementById("xp-" + k).checked = on);
+  }else{
+    document.getElementById("xp-all").checked = keys.every(k => document.getElementById("xp-" + k).checked);
+  }
+}
+async function exportExcelRun(){
+  const picked = exportSections().filter(s => document.getElementById("xp-" + s.key).checked);
+  if(picked.length === 0){ showToast("내보낼 항목을 하나 이상 골라 주세요", { error: true }); return; }
+  const btn = document.getElementById("xp-go");
+  if(btn){ btn.disabled = true; btn.textContent = "만드는 중…"; }
+  try{
+    await exportExcel(picked.map(s => s.key));
+    closeModal();
+  }catch(e){
+    if(btn){ btn.disabled = false; btn.textContent = "내보내기"; }
+    showToast("엑셀을 만들지 못했어요: " + (e && e.message ? e.message : e), { error: true });
+  }
+}
+
+async function exportExcel(keys){
+  const wb = XLSX.utils.book_new();
+  if(keys.includes("fte")) fteExportSheets(wb);
+  if(keys.includes("ctms")) ctmsExportSheets(wb);
+  await worklogExportSheets(wb, keys); // worklog.js — 재택·주간보고·교육 (Supabase에서 불러옴)
+  const all = exportSections().every(s => keys.includes(s.key));
+  const label = all ? "전체" : EXPORT_SECTIONS.filter(s => keys.includes(s.key)).map(s => s.label.replace(/\s/g, "")).join("_");
+  const xlsxData = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+  await saveFileToViewer("업무관리_" + label + "_" + todayYmd() + ".xlsx", xlsxData, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+}
+
+// 고른 항목에 기록이 하나도 없어도 시트는 만들어, 빠진 게 아니라 비어 있다는 걸 알 수 있게 한다
+function appendSheetOrEmpty(wb, rows, name){
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows.length > 0 ? rows : [{ "안내": "기록이 없어요" }]), name);
+}
+
+function ctmsExportSheets(wb){
+  appendSheetOrEmpty(wb, ctmsExportRows(), "CTMS 진행");
+  ctmsExtExportSheets(wb);
+}
+
+function fteExportSheets(wb){
   const map = taskTypeById();
   const pmap = productById();
-  const wb = XLSX.utils.book_new();
 
-  const rows1 = state.assignments.map(a => {
+  const rows1 = fteAssignments().map(a => {
     const t = map[a.taskTypeId];
     const p = pmap[a.productId];
     const m = state.members.find(x => x.id === a.memberId);
     const coNames = a.groupId
-      ? state.assignments.filter(x => x.groupId === a.groupId && x.id !== a.id)
+      ? fteAssignments().filter(x => x.groupId === a.groupId && x.id !== a.id)
           .map(x => { const cm = state.members.find(y => y.id === x.memberId); return cm ? cm.name : "삭제된 팀원"; })
       : [];
     return {
@@ -602,7 +676,7 @@ async function exportExcel(){
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows1), "배정목록");
 
   const overrideRows = [];
-  state.assignments.forEach(a => {
+  fteAssignments().forEach(a => {
     const t = map[a.taskTypeId];
     const m = state.members.find(x => x.id === a.memberId);
     Object.keys(a.overrides || {}).sort().forEach(period => {
@@ -621,14 +695,8 @@ async function exportExcel(){
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(overrideRows), "월별 FTE 조정");
   }
 
-  const ctmsRows = ctmsExportRows();
-  if(ctmsRows.length > 0){
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(ctmsRows), "CTMS 진행");
-  }
-  ctmsExtExportSheets(wb);
-
   const basis = currentPeriod();
-  const rows2 = state.members.map(m => {
+  const rows2 = fteMembers().map(m => {
     const sc = memberFteAt(m.id, basis, "SC");
     const pc = memberFteAt(m.id, basis, "PC");
     const msl = memberFteAt(m.id, basis, "MSL");
@@ -645,7 +713,7 @@ async function exportExcel(){
   for(let offset = 0; offset < 3; offset++){
     const y = year + offset;
     const months = Array.from({length:12}, (_,i) => y+"-"+String(i+1).padStart(2,"0"));
-    const rows = state.members.map(m => {
+    const rows = fteMembers().map(m => {
       const row = { "팀원": m.name };
       months.forEach(p => { row[periodLabel(p)] = Number(fmt(memberFteAt(m.id, p))); });
       return row;
@@ -653,7 +721,7 @@ async function exportExcel(){
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), y+"년 월별 현황");
   }
 
-  const rows4 = state.members.map(m => {
+  const rows4 = fteMembers().map(m => {
     const row = { "팀원": m.name };
     for(let offset = 0; offset < 3; offset++){
       const y = year + offset;
@@ -664,9 +732,6 @@ async function exportExcel(){
     return row;
   });
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows4), "3개년 연평균");
-
-  const xlsxData = XLSX.write(wb, { bookType: "xlsx", type: "array" });
-  await saveFileToViewer("FTE_현황_"+basis+".xlsx", xlsxData, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
 }
 
 /* ---------------- render: shell ---------------- */
@@ -755,7 +820,7 @@ function renderHeader(){
   const roleBadge = '<div style="display:flex;align-items:center;gap:6px;">' +
     '<span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;' +
       (isAdmin() ? 'background:#E5F1F1;color:var(--accent);' : 'background:#F1F5F9;color:#64748B;') + '">' +
-      (isAdmin() ? '관리자' : canWrite() ? '회원' : '뷰어') +
+      (isAdmin() ? '관리자' : roleLabel(currentProfile && currentProfile.role)) +
     '</span>' +
     '<span style="font-size:12px;font-weight:700;color:#475569;">' + esc(currentProfile ? currentProfile.name || currentProfile.login_id : '') + '</span>' +
     '<button onclick="logout()" style="font-size:11px;color:#94A3B8;background:none;border:none;text-decoration:underline;">로그아웃</button>' +
@@ -773,7 +838,7 @@ function renderHeader(){
         '<button class="btn-export" onclick="showActivityLog()">'+icon('list',14)+' 변경 이력</button>' +
         (isAdmin() ? '<button class="btn-export" onclick="triggerImport()">'+icon('upload',14)+' 백업 불러오기</button>' : '') +
         '<button class="btn-export" onclick="downloadBackup()">'+icon('download',14)+' 백업 다운로드</button>' +
-        '<button class="btn-export" onclick="exportExcel()">'+icon('download',14)+' 엑셀 내보내기</button>' +
+        '<button class="btn-export" onclick="exportExcelOpen()">'+icon('download',14)+' 엑셀 내보내기</button>' +
         '<input type="file" id="backup-file-input" accept="application/json" style="display:none;" onchange="handleImportFile(this)"/>' +
       '</div>' +
     '</div></div>';
@@ -862,7 +927,7 @@ function renderTabContent(){
 
 /* ---------------- Dashboard ---------------- */
 function renderDashboard(){
-  if(state.members.length === 0){
+  if(fteMembers().length === 0){
     return '<div class="card"><div class="empty">아직 등록된 팀원이 없어요. \'팀원 관리\' 탭에서 먼저 팀원을 추가해 주세요.</div></div>';
   }
   const basis = state.dash.basis;
@@ -873,28 +938,28 @@ function renderDashboard(){
   const pmap = productById();
 
   const subtotals = LINE_ORDER.map(line => ({
-    line, total: state.members.reduce((s,m) => s + memberFteAt(m.id, basis, line), 0)
+    line, total: fteMembers().reduce((s,m) => s + memberFteAt(m.id, basis, line), 0)
   }));
-  const grandTotal = state.members.reduce((s,m) => s + memberFteAt(m.id, basis, lineFilter, productFilter), 0);
+  const grandTotal = fteMembers().reduce((s,m) => s + memberFteAt(m.id, basis, lineFilter, productFilter), 0);
   const relevantProducts = lineFilter === "전체" ? state.products : state.products.filter(p => p.line === lineFilter);
   const productSubtotals = relevantProducts.map(p => ({
-    product: p, total: state.members.reduce((s,m) => s + memberFteAt(m.id, basis, lineFilter, p.id), 0)
+    product: p, total: fteMembers().reduce((s,m) => s + memberFteAt(m.id, basis, lineFilter, p.id), 0)
   }));
-  const unassignedProductTotal = state.members.reduce((s,m) => s + memberFteAt(m.id, basis, lineFilter, "__none__"), 0);
+  const unassignedProductTotal = fteMembers().reduce((s,m) => s + memberFteAt(m.id, basis, lineFilter, "__none__"), 0);
   const typeSubtotals = state.taskTypes.map(t => ({
-    type: t, total: state.members.reduce((s,m) => s + state.assignments
+    type: t, total: fteMembers().reduce((s,m) => s + fteAssignments()
       .filter(a => a.memberId === m.id && a.taskTypeId === t.id && isActive(a, basis))
       .reduce((s2,a) => s2 + fteForPeriod(a, basis), 0), 0)
   })).filter(x => x.total > 0);
-  const idleList = state.members
+  const idleList = fteMembers()
     .map(m => ({ m, total: memberFteAt(m.id, basis) }))
     .map(x => Object.assign(x, { remain: 1.0 - x.total }))
     .sort((a,b) => b.remain - a.remain);
 
   const todayPeriod = currentPeriod();
-  const overCapacityMembers = state.members.filter(m => isOverCapacity(memberFteAt(m.id, todayPeriod)));
+  const overCapacityMembers = fteMembers().filter(m => isOverCapacity(memberFteAt(m.id, todayPeriod)));
   const soonEndBound = periodPlus(todayPeriod, 2);
-  const endingSoonRaw = state.assignments
+  const endingSoonRaw = fteAssignments()
     .filter(a => a.endPeriod && a.status !== "종료" && a.status !== "중단" && a.endPeriod >= todayPeriod && a.endPeriod <= soonEndBound);
   const endingSoonMap = new Map();
   endingSoonRaw.forEach(a => {
@@ -1012,8 +1077,8 @@ function renderDashboard(){
         '</div>' : '') : '') +
   '</div>';
 
-  state.members.forEach(m => {
-    const mine = state.assignments
+  fteMembers().forEach(m => {
+    const mine = fteAssignments()
       .filter(a => a.memberId === m.id && isActive(a, basis))
       .filter(a => { if(lineFilter==="전체") return true; const t=map[a.taskTypeId]; return t && t.line===lineFilter; })
       .filter(a => {
@@ -1333,7 +1398,7 @@ function assignmentGroupMembers(a, period){
   return group.filter(x => isActive(x, period));
 }
 function coAssignTagHtml(a, period){
-  const group = assignmentGroupMembers(a, period);
+  const group = assignmentGroupMembers(a, period).filter(x => !isLeaderMember(x.memberId));
   if(group.length <= 1) return '';
   const names = group.map(x => { const m = state.members.find(y => y.id === x.memberId); return m ? m.name : "삭제된 팀원"; }).join(', ');
   return '<span title="공동 배정: '+esc(names)+'" style="font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:999px;' +
@@ -1368,9 +1433,9 @@ function openCoAssignModal(id){
   const a = state.assignments.find(x => x.id === id);
   if(!a) return;
   const group = assignmentGroupMembers(a); // full historical group, so a person can't be double-added
-  const activeGroup = assignmentGroupMembers(a, currentPeriod());
+  const activeGroup = assignmentGroupMembers(a, currentPeriod()).filter(x => !isLeaderMember(x.memberId));
   const usedMemberIds = group.map(x => x.memberId);
-  const available = state.members.filter(m => !usedMemberIds.includes(m.id));
+  const available = fteMembers().filter(m => !usedMemberIds.includes(m.id));
   const t = taskTypeById()[a.taskTypeId];
   const defaultFte = t ? t.fte : a.fte;
   showModal(
@@ -1380,7 +1445,7 @@ function openCoAssignModal(id){
     (activeGroup.length > 1 ? '<br/>현재 담당('+periodLabel(currentPeriod())+' 기준): '+activeGroup.map(x=>{const m=state.members.find(y=>y.id===x.memberId);return m?esc(m.name):"삭제된 팀원";}).join(', ') : '') +
     '</div>' +
     (available.length === 0 ?
-      '<div style="font-size:12.5px;color:#94A3B8;margin-bottom:14px;">추가할 수 있는 팀원이 없어요 (등록된 팀원이 모두 이미 배정됨).</div>' +
+      '<div style="font-size:12.5px;color:#94A3B8;margin-bottom:14px;">추가할 수 있는 팀원이 없어요 (팀장을 뺀 팀원이 모두 이미 배정됨).</div>' +
       '<button class="add-btn" style="width:100%;justify-content:center;background:#fff;color:#475569;border:1px solid var(--border);" onclick="closeModal()">닫기</button>' :
       '<div class="field"><div class="field-label">담당자</div>' +
         '<select class="input" id="ca-member"><option value="">선택하세요</option>' +
@@ -1462,7 +1527,7 @@ function renderAssignTab(){
         '<input class="input" id="af-fte" type="number" step="0.01" min="0"/></div>' +
       '<div class="field"><div class="field-label">담당 팀원</div>' +
         '<select class="input" id="af-member"><option value="">선택하세요</option>' +
-        state.members.map(m => '<option value="'+m.id+'">'+esc(m.name)+'</option>').join("") +
+        fteMembers().map(m => '<option value="'+m.id+'">'+esc(m.name)+'</option>').join("") +
         '<option value="__new__">+ 새 팀원 직접 추가</option>' +
         '</select>' +
         '<div id="af-newmember-wrap" style="display:none;margin-top:8px;">' +
@@ -1489,7 +1554,7 @@ function renderAssignTab(){
   const productFilter = state.search.assignProductFilter || "전체";
   const typeFilter = state.search.assignTypeFilter || "전체";
   const filtersActive = memberFilter !== "전체" || productFilter !== "전체" || typeFilter !== "전체";
-  let filteredAssignments = state.assignments.filter(a => {
+  let filteredAssignments = fteAssignments().filter(a => {
     if(memberFilter !== "전체" && a.memberId !== memberFilter) return false;
     if(productFilter !== "전체"){
       if(productFilter === "__none__"){ if(a.productId) return false; }
@@ -1519,18 +1584,18 @@ function renderAssignTab(){
     const gid = a.groupId || a.id;
     if(seenGroups.has(gid)) return;
     seenGroups.add(gid);
-    const members = state.assignments.filter(x => (x.groupId || x.id) === gid)
+    const members = fteAssignments().filter(x => (x.groupId || x.id) === gid)
       .sort((x,y) => (x.startPeriod||"").localeCompare(y.startPeriod||""));
     groupedList.push({ primary: a, gid, members });
   });
-  const totalGroupIds = new Set(state.assignments.map(a => a.groupId || a.id));
+  const totalGroupIds = new Set(fteAssignments().map(a => a.groupId || a.id));
 
   html += '<div class="card">' +
     '<div style="font-size:13px;font-weight:700;color:#475569;margin-bottom:10px;">전체 배정 목록 ('+groupedList.length+(filtersActive?' / '+totalGroupIds.size:'')+')</div>' +
     '<div style="display:flex;gap:6px;margin-bottom:12px;">' +
       '<select class="input view-ok" onchange="setAssignMemberFilter(this.value)" style="flex:1 1 0;min-width:0;font-size:12px;padding:7px 6px;">' +
         '<option value="전체">담당자 전체</option>' +
-        state.members.map(m => '<option value="'+m.id+'"'+(memberFilter===m.id?" selected":"")+'>'+esc(m.name)+'</option>').join("") +
+        fteMembers().map(m => '<option value="'+m.id+'"'+(memberFilter===m.id?" selected":"")+'>'+esc(m.name)+'</option>').join("") +
       '</select>' +
       '<select class="input view-ok" onchange="setAssignTypeFilter(this.value)" style="flex:1 1 0;min-width:0;font-size:12px;padding:7px 6px;">' +
         '<option value="전체">과제유형 전체</option>' +
@@ -1549,7 +1614,7 @@ function renderAssignTab(){
       '</select>' +
     '</div>' +
   '</div>';
-  if(state.assignments.length === 0){
+  if(fteAssignments().length === 0){
     html += '<div class="empty">아직 배정된 과제가 없어요.</div>';
   }else if(groupedList.length === 0){
     html += '<div class="empty">조건에 맞는 배정이 없어요.</div>';
@@ -1741,8 +1806,11 @@ function renderMembersTab(){
         'style="flex:1;min-width:120px;font-size:13.5px;font-weight:600;border-color:transparent;background:transparent;padding:6px 8px;" ' +
         'onfocus="this.style.borderColor=\'var(--border)\';this.style.background=\'#fff\';" ' +
         'onblur="this.style.borderColor=\'transparent\';this.style.background=\'transparent\';"/>' +
+      '<label title="팀장은 과제 배정 대상에서 빠지고 FTE 화면에 보이지 않아요" style="display:flex;align-items:center;gap:5px;font-size:12.5px;font-weight:700;white-space:nowrap;color:'+(m.leader?'var(--accent)':'#94A3B8')+';cursor:pointer;">' +
+        '<input type="checkbox"'+(m.leader?' checked':'')+' onchange="setMemberLeader(\''+m.id+'\', this.checked)"/> 팀장</label>' +
       '<button class="icon-btn" onclick="removeMember(\''+m.id+'\')">'+icon('trash',14)+'</button></div>'
     ).join("");
+    html += '<div style="font-size:11.5px;color:#94A3B8;margin-top:10px;line-height:1.5;">팀장으로 표시하면 과제 배정 대상에서 빠지고, 배정 현황·과제 배정·과제 진행 현황·월별/분기별 화면에 보이지 않아요.</div>';
   }
   html += '</div>';
   html += profilesSectionHtml();
@@ -1767,19 +1835,18 @@ function profilesSectionHtml(){
   let html = '<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">' +
     '<div style="font-size:13px;font-weight:700;color:#475569;">회원 승인 ('+profilesCache.length+'명'+(pending ? ' · <span style="color:#B45309;">대기 '+pending+'명</span>' : '')+')</div>' +
     '<button class="icon-round" title="새로고침" onclick="profilesCache=null;renderTabContent()">'+icon('refresh',13)+'</button></div>' +
-    '<div style="font-size:12px;color:#94A3B8;margin-bottom:12px;">승인해야 데이터가 보여요. 팀원을 연결하면 CTMS에서 본인 담당 과제를 입력할 수 있어요. 뷰어는 팀원 연결 없이 조회만 할 수 있어요.</div>';
+    '<div style="font-size:12px;color:#94A3B8;margin-bottom:12px;">승인해야 데이터가 보여요. 팀원을 연결하면 CTMS에서 본인 담당 과제를 입력할 수 있어요. 팀장은 과제 배정 대상에서 빠지고(FTE 화면에 안 보임), 뷰어는 팀원 연결 없이 조회만 할 수 있어요.</div>';
   html += profilesCache.map(p => {
     const isMe = currentProfile && p.id === currentProfile.id;
     const isViewer = p.role === "viewer";
     const tag = p.role === "admin"
       ? '<span class="line-tag" style="background:#E5F1F1;color:var(--accent);">관리자</span>'
       : !p.approved ? '<span class="line-tag" style="background:#FEF3E2;color:#B45309;">승인 대기</span>'
-      : isViewer ? '<span class="line-tag" style="background:#F1F5F9;color:#64748B;">뷰어</span>'
-      : '<span class="line-tag" style="background:#E7F6EC;color:#16A34A;">승인됨</span>';
-    // 뷰어 ↔ 일반 회원 전환 (승인된 일반·뷰어 회원만). 뷰어로 바꾸면 팀원 연결도 끊는다.
+      : '<span class="line-tag" style="'+(isViewer ? 'background:#F1F5F9;color:#64748B;' : 'background:#E7F6EC;color:#16A34A;')+'">'+roleLabel(p.role)+'</span>';
+    // 팀장 · 팀원 · 뷰어 전환 (승인된 관리자 외 회원만). 뷰어로 바꾸면 팀원 연결도 끊는다.
     const roleSel = (p.approved && p.role !== "admin" && !isMe)
-      ? '<select class="input" style="width:110px;padding:6px 8px;font-size:12.5px;" onchange="updateProfile(\''+p.id+'\', this.value === \'viewer\' ? { role: \'viewer\', member_id: null } : { role: \'member\' })">' +
-          '<option value="member"'+(isViewer ? '' : ' selected')+'>일반 회원</option><option value="viewer"'+(isViewer ? ' selected' : '')+'>뷰어</option></select>'
+      ? '<select class="input" style="width:100px;padding:6px 8px;font-size:12.5px;" onchange="setProfileRole(\''+p.id+'\', this.value)">' +
+          ["leader", "member", "viewer"].map(r => '<option value="'+r+'"'+(p.role === r ? ' selected' : '')+'>'+roleLabel(r)+'</option>').join("") + '</select>'
       : '';
     return '<div class="list-row">' +
       '<div style="display:flex;align-items:center;gap:8px;min-width:150px;">' + tag +
@@ -1788,7 +1855,7 @@ function profilesSectionHtml(){
       '<div style="display:flex;align-items:center;gap:8px;">' +
         roleSel +
         (isViewer ? '' :
-        '<select class="input" style="width:150px;padding:6px 8px;font-size:12.5px;" onchange="updateProfile(\''+p.id+'\', { member_id: this.value || null })">' +
+        '<select class="input" style="width:150px;padding:6px 8px;font-size:12.5px;" onchange="setProfileMember(\''+p.id+'\', this.value || null)">' +
           '<option value="">팀원 연결 안 함</option>' +
           state.members.map(m => '<option value="'+m.id+'"'+(p.member_id === m.id ? ' selected' : '')+'>'+esc(m.name)+'</option>').join("") +
         '</select>') +
@@ -1823,10 +1890,38 @@ async function deleteProfile(id){
 }
 async function updateProfile(id, patch){
   const { error } = await sb.from("profiles").update(patch).eq("id", id);
-  if(error){ showToast("회원 정보를 저장하지 못했어요", { error: true }); return; }
+  if(error){ showToast("회원 정보를 저장하지 못했어요", { error: true }); return false; }
   const p = profilesCache.find(x => x.id === id);
   if(p) Object.assign(p, patch);
   if(currentProfile && currentProfile.id === id) Object.assign(currentProfile, patch);
+  renderTabContent();
+  return true;
+}
+const ROLE_LABEL = { admin: "관리자", leader: "팀장", member: "팀원", viewer: "뷰어" };
+function roleLabel(role){ return ROLE_LABEL[role] || "팀원"; }
+// 회원 구분 변경. 팀장 여부는 연결된 팀원 기록(members[].leader)에도 맞춰 둔다 —
+// FTE 화면은 모든 회원이 앱 데이터만 보고 그리므로, 거기서 팀장을 가려낼 수 있어야 한다.
+async function setProfileRole(id, role){
+  const p = profilesCache.find(x => x.id === id);
+  if(!p) return;
+  const ok = await updateProfile(id, role === "viewer" ? { role, member_id: null } : { role });
+  if(!ok) return;
+  if(role !== "viewer" && p.member_id) setMemberLeader(p.member_id, role === "leader");
+}
+async function setProfileMember(id, memberId){
+  const p = profilesCache.find(x => x.id === id);
+  if(!p) return;
+  const ok = await updateProfile(id, { member_id: memberId });
+  if(ok && memberId && p.role === "leader") setMemberLeader(memberId, true);
+}
+function setMemberLeader(id, on){
+  const m = state.members.find(x => x.id === id);
+  if(!m || !!m.leader === on) { renderTabContent(); return; }
+  if(on) m.leader = true; else delete m.leader;
+  const count = state.assignments.filter(a => a.memberId === id).length;
+  logActivity((on ? '팀장 지정: ' : '팀장 해제: ') + m.name);
+  if(on && count > 0) showToast(m.name + '님의 기존 배정 ' + count + '건은 FTE 화면에서 숨겨져요 (삭제되지는 않아요)');
+  scheduleSave();
   renderTabContent();
 }
 function addMember(){
@@ -2066,7 +2161,7 @@ function removeTaskType(id){
 
 /* ---------------- Monthly / Quarterly ---------------- */
 function renderMonthlyTab(){
-  if(state.members.length === 0){
+  if(fteMembers().length === 0){
     return '<div class="card"><div class="empty">아직 등록된 팀원이 없어요.</div></div>';
   }
   const year = state.monthly.year;
@@ -2120,7 +2215,7 @@ function renderMonthlyTab(){
       columns.map(c => '<th>'+c.label+'</th>').join("") +
     '</tr></thead><tbody>';
 
-  state.members.forEach(m => {
+  fteMembers().forEach(m => {
     html += '<tr><td class="name-cell">'+esc(m.name)+'</td>';
     columns.forEach(c => {
       const v = valueFor(m.id, c);
@@ -2134,7 +2229,7 @@ function renderMonthlyTab(){
   html += '<tr style="background:#F1F5F9;">' +
     '<td class="name-cell" style="font-weight:800;background:#F1F5F9;">팀 합계</td>' +
     columns.map(c => {
-      const total = state.members.reduce((sum,m) => sum + valueFor(m.id, c), 0);
+      const total = fteMembers().reduce((sum,m) => sum + valueFor(m.id, c), 0);
       return '<td style="font-weight:800;color:var(--accent);">'+fmt(total)+'</td>';
     }).join("") +
   '</tr>';
@@ -2149,7 +2244,7 @@ function setMonthlyMode(mode){ state.monthly.mode = mode; renderTabContent(); }
 
 /* ---------------- Task Status (과제 진행 현황) ---------------- */
 function renderStatusTab(){
-  if(state.assignments.length === 0){
+  if(fteAssignments().length === 0){
     return '<div class="card"><div class="empty">아직 배정된 과제가 없어요. \'과제 배정\' 탭에서 먼저 과제를 배정해 주세요.</div></div>';
   }
   const map = taskTypeById();
@@ -2164,10 +2259,10 @@ function renderStatusTab(){
   // 이미 기간이 지남)까지 통째로 숨기면 '과제 배정' 탭 건수와 어긋나므로, 그런 경우는
   // 그대로 표시한다.
   const groupHasActiveMember = {};
-  state.assignments.forEach(a => {
+  fteAssignments().forEach(a => {
     if(isActive(a, basis)) groupHasActiveMember[a.groupId || a.id] = true;
   });
-  state.assignments.forEach(a => {
+  fteAssignments().forEach(a => {
     const st = a.status || "준비중";
     const gid = a.groupId || a.id;
     if(st !== "종료" && st !== "중단" && !isActive(a, basis) && groupHasActiveMember[gid]) return;

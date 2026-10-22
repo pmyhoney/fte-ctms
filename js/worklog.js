@@ -140,13 +140,17 @@ async function wfhExport(){
   Object.keys(wfh.others).forEach(day => wfh.others[day].forEach(o => rows.push({ day, name: o.name, kind: o.kind, journal: o.journal })));
   if(rows.length === 0){ showToast(periodLabel(wfh.ym) + "에는 재택 기록이 없어요"); return; }
   rows.sort((a, b) => a.day.localeCompare(b.day) || a.name.localeCompare(b.name, "ko"));
-  const data = rows.map(r => ({ "날짜": r.day, "이름": r.name, "구분": WFH_KIND[r.kind], "업무 일지": r.journal }));
-  const ws = XLSX.utils.json_to_sheet(data);
-  ws["!cols"] = [{ wch: 12 }, { wch: 10 }, { wch: 6 }, { wch: 80 }];
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "재택 " + wfh.ym);
+  XLSX.utils.book_append_sheet(wb, wfhSheet(rows), "재택 " + wfh.ym);
   const xlsxData = XLSX.write(wb, { bookType: "xlsx", type: "array" });
   await saveFileToViewer("재택_" + wfh.ym + ".xlsx", xlsxData, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+}
+// rows: [{ day, name, kind, journal }] — 재택 탭 엑셀과 전체 엑셀 내보내기가 같은 모양을 쓴다
+function wfhSheet(rows){
+  const data = rows.map(r => ({ "날짜": r.day, "이름": r.name, "구분": WFH_KIND[r.kind] || WFH_KIND.full, "업무 일지": r.journal || "" }));
+  const ws = XLSX.utils.json_to_sheet(data.length > 0 ? data : [{ "안내": "기록이 없어요" }]);
+  if(data.length > 0) ws["!cols"] = [{ wch: 12 }, { wch: 10 }, { wch: 6 }, { wch: 80 }];
+  return ws;
 }
 
 function wfhClick(key){
@@ -397,15 +401,16 @@ async function weeklyDelete(id){
 async function weeklyExport(){
   const picked = weekly.rows.filter(r => weekly.selected[r.id]);
   if(picked.length === 0) return;
-  const data = picked.map(r => {
-    const row = {};
-    WEEKLY_COLS.forEach(c => row[c.label] = r[c.key]);
-    return row;
-  });
+  const data = picked.map(weeklyExportRow);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), "주간보고");
   const xlsxData = XLSX.write(wb, { bookType: "xlsx", type: "array" });
   await saveFileToViewer("주간보고_" + todayYmd() + ".xlsx", xlsxData, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+}
+function weeklyExportRow(r){
+  const row = {};
+  WEEKLY_COLS.forEach(c => row[c.label] = r[c.key]);
+  return row;
 }
 
 /* ---------------- 교육 이력 ---------------- */
@@ -723,16 +728,68 @@ async function trainingDelete(id){
 
 // 지금 필터로 보이는 목록을 엑셀로 내려받는다
 async function trainingExport(){
-  const data = trainingFiltered().map(r => ({
-    "팀원": r.member, "이수일": r.edu_date, "교육명": r.title, "주관": r.org, "시간(h)": r.hours,
-    "구분": r.scope, "유형": r.edu_type, "전달교육": r.scope === "사외" ? TX_LABEL[trTx(r)] : "해당없음",
-    "전달 계획일": r.tx_plan_date || "", "전달 실시일": r.tx_done_date || "", "비고": r.note,
-  }));
+  const data = trainingFiltered().map(trainingExportRow);
   if(data.length === 0){ showToast("내려받을 이력이 없어요", { error: true }); return; }
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), "교육이력");
   const xlsxData = XLSX.write(wb, { bookType: "xlsx", type: "array" });
   await saveFileToViewer("교육이력_" + todayYmd() + ".xlsx", xlsxData, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+}
+function trainingExportRow(r){
+  return {
+    "팀원": r.member, "이수일": r.edu_date, "교육명": r.title, "주관": r.org, "시간(h)": r.hours,
+    "구분": r.scope, "유형": r.edu_type, "전달교육": r.scope === "사외" ? TX_LABEL[trTx(r)] : "해당없음",
+    "전달 계획일": r.tx_plan_date || "", "전달 실시일": r.tx_done_date || "", "비고": r.note,
+  };
+}
+
+/* ---------------- 헤더 '엑셀 내보내기' (app.js exportExcel)에서 재택·주간보고·교육 시트 만들기 ----------------
+   탭 화면은 보고 있는 달·필터만 담지만, 여기서는 볼 수 있는 기록 전체를 DB에서 새로 불러온다
+   (관리자는 전체 팀원, 회원은 DB 정책상 볼 수 있는 것만). */
+// Supabase는 한 번에 최대 1,000행만 돌려주므로 나눠서 끝까지 불러온다
+async function sbFetchAll(makeQuery){
+  const PAGE = 1000, out = [];
+  for(let from = 0; ; from += PAGE){
+    const { data, error } = await makeQuery().range(from, from + PAGE - 1);
+    if(error) throw new Error(error.message);
+    out.push(...data);
+    if(data.length < PAGE) return out;
+  }
+}
+
+async function worklogExportSheets(wb, keys){
+  if(keys.includes("wfh")){
+    const me = currentProfile.id;
+    const myName = currentProfile.name || currentProfile.login_id;
+    const data = await sbFetchAll(() => {
+      const q = sb.from("wfh_days").select("user_id,day,kind,journal").order("day").order("user_id");
+      return isAdmin() ? q : q.eq("user_id", me);
+    });
+    let names = {};
+    if(isAdmin()){
+      const res = await sb.from("profiles").select("id,name,login_id");
+      (res.data || []).forEach(p => names[p.id] = p.name || p.login_id);
+    }
+    const rows = data.map(r => ({ day: r.day, name: r.user_id === me ? myName : (names[r.user_id] || "이름 없음"), kind: r.kind, journal: r.journal }));
+    rows.sort((a, b) => a.day.localeCompare(b.day) || a.name.localeCompare(b.name, "ko"));
+    XLSX.utils.book_append_sheet(wb, wfhSheet(rows), "재택·일지");
+  }
+  if(keys.includes("weekly")){
+    const data = await sbFetchAll(() => sb.from("weekly_reports").select("*")
+      .order("visit_date", { ascending: false }).order("created_at", { ascending: false }));
+    appendSheetOrEmpty(wb, data.map(weeklyExportRow), "주간보고");
+  }
+  if(keys.includes("training")){
+    const [tr, tx] = await Promise.all([
+      sbFetchAll(() => sb.from("trainings").select("*").order("edu_date", { ascending: false }).order("created_at", { ascending: false })),
+      sbFetchAll(() => sb.from("tx_sessions").select("*").order("session_date", { ascending: false }).order("created_at", { ascending: false })),
+    ]);
+    appendSheetOrEmpty(wb, tr.map(trainingExportRow), "교육이력");
+    appendSheetOrEmpty(wb, tx.map(s => ({
+      "시행일자": s.session_date, "제목": s.title, "교육자": s.educator || "", "참석자": s.attendees || "",
+      "교육 이력 연동": s.training_id ? "Y" : "",
+    })), "팀내 전달교육");
+  }
 }
 
 // 로그아웃할 때 다른 사람이 이어서 로그인해도 이전 계정의 기록이 보이지 않게 비운다.
