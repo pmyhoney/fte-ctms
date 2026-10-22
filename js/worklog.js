@@ -102,7 +102,7 @@ function renderWfhTab(){
     '</div>' +
     '<div style="font-size:12px;color:#94A3B8;margin-top:12px;line-height:1.6;">' +
       '날짜를 누르면 반일·종일을 골라 재택을 신청하거나 취소할 수 있어요. 재택 당일(또는 지난 재택일)을 누르면 업무 일지를 쓸 수 있어요.' +
-      (isAdmin() ? '<br/>관리자 화면이라 다른 팀원의 재택 신청도 이름으로 함께 보여요. 이름을 누르면 그 사람의 업무 일지를 볼 수 있어요.' : '') +
+      (isAdmin() ? '<br/>관리자·팀장 화면이라 다른 팀원의 재택 신청도 이름으로 함께 보여요. 이름을 누르면 그 사람의 업무 일지를 볼 수 있어요.' : '') +
     '</div>' +
   '</div>';
 }
@@ -290,7 +290,7 @@ function renderWeeklyTab(){
   const rows = weekly.rows;
   const selCount = rows.filter(r => weekly.selected[r.id]).length;
   const allOn = rows.length > 0 && selCount === rows.length;
-  const canEdit = (r) => isAdmin() || (canWrite() && r.user_id === currentProfile.id); // 수정·삭제 권한 (DB 정책과 같은 기준)
+  const canEdit = (r) => isSysAdmin() || (canWrite() && r.user_id === currentProfile.id); // 수정·삭제 권한 (DB 정책과 같은 기준)
   const table = rows.length === 0 ? '<div class="empty">아직 기록이 없어요. 위에서 방문 기록을 추가해 주세요.</div>' :
     '<div style="overflow-x:auto;"><table>' +
       '<thead><tr>' +
@@ -429,7 +429,7 @@ function trTx(r){ // 팀내 전달교육 상태 (사외 교육만 해당)
   if(!r.tx_need) return "na";
   return r.tx_status || "todo";
 }
-const trCanEdit = (r) => isAdmin() || (canWrite() && r.user_id === currentProfile.id); // DB 정책과 같은 기준
+const trCanEdit = (r) => isSysAdmin() || (canWrite() && r.user_id === currentProfile.id); // DB 정책과 같은 기준
 
 async function trainingLoad(){
   const [tr, tx] = await Promise.all([

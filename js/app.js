@@ -81,7 +81,7 @@ function closeModal(){
   if(el) el.remove();
 }
 
-/* ---------------- role (admin = editable, viewer = read-only) — set from the Supabase profile in auth.js ---------------- */
+/* ---------------- role (admin = editable [관리자·팀장], viewer = read-only) — set from the Supabase profile in auth.js ---------------- */
 async function enterAsAdmin(){
   state.role = "admin";
   state.ctmsAuth = null;
@@ -158,7 +158,10 @@ let state = {
   forceNextSave: false, // when true, the next saveNow() skips the regressive-save pre-check once
 };
 let saveTimer = null;
+// isAdmin: FTE 관리·CTMS 편집, 재택 전체 조회 권한 (관리자 + 팀장)
+// isSysAdmin: 관리자 계정만 — 팀원 관리·과제 유형·품목 관리 탭, 백업 불러오기, 다른 사람의 주간보고·교육 수정
 function isAdmin(){ return state.role === "admin"; }
+function isSysAdmin(){ return isAdmin() && !!currentProfile && currentProfile.role === "admin"; }
 
 function taskTypeById(){
   const map = {};
@@ -279,7 +282,7 @@ function scheduleSave(){
 function describeStorageError(e){
   const code = e && e.code;
   if(code === "42501"){
-    return "저장 권한이 없어요. 관리자 계정으로 로그인했는지 확인해 주세요.";
+    return "저장 권한이 없어요. 관리자 또는 팀장 계정으로 로그인했는지 확인해 주세요.";
   }
   if(code === "P0001"){
     return e.message; // save_ctms가 돌려준 안내 문구 (예: 본인 담당 과제가 아니에요)
@@ -820,7 +823,7 @@ function renderHeader(){
   const roleBadge = '<div style="display:flex;align-items:center;gap:6px;">' +
     '<span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;' +
       (isAdmin() ? 'background:#E5F1F1;color:var(--accent);' : 'background:#F1F5F9;color:#64748B;') + '">' +
-      (isAdmin() ? '관리자' : roleLabel(currentProfile && currentProfile.role)) +
+      roleLabel(currentProfile && currentProfile.role) +
     '</span>' +
     '<span style="font-size:12px;font-weight:700;color:#475569;">' + esc(currentProfile ? currentProfile.name || currentProfile.login_id : '') + '</span>' +
     '<button onclick="logout()" style="font-size:11px;color:#94A3B8;background:none;border:none;text-decoration:underline;">로그아웃</button>' +
@@ -836,7 +839,7 @@ function renderHeader(){
         (isAdmin() ? '<button class="btn-export" onclick="manualSave()">'+icon('save',14)+' 저장</button>' : '') +
         '<button class="btn-export" onclick="refreshPage()">'+icon('refresh',14)+' 새로고침</button>' +
         '<button class="btn-export" onclick="showActivityLog()">'+icon('list',14)+' 변경 이력</button>' +
-        (isAdmin() ? '<button class="btn-export" onclick="triggerImport()">'+icon('upload',14)+' 백업 불러오기</button>' : '') +
+        (isSysAdmin() ? '<button class="btn-export" onclick="triggerImport()">'+icon('upload',14)+' 백업 불러오기</button>' : '') +
         '<button class="btn-export" onclick="downloadBackup()">'+icon('download',14)+' 백업 다운로드</button>' +
         '<button class="btn-export" onclick="exportExcelOpen()">'+icon('download',14)+' 엑셀 내보내기</button>' +
         '<input type="file" id="backup-file-input" accept="application/json" style="display:none;" onchange="handleImportFile(this)"/>' +
@@ -854,7 +857,7 @@ function renderTabBar(){
     { id: "members", label: "팀원 관리", icon: "users", adminOnly: true },
     { id: "types", label: "과제 유형", icon: "list", adminOnly: true },
     { id: "products", label: "품목 관리", icon: "box", adminOnly: true },
-  ].filter(it => (!it.adminOnly || isAdmin()) && (!it.writerOnly || canWrite()));
+  ].filter(it => (!it.adminOnly || isSysAdmin()) && (!it.writerOnly || canWrite()));
   document.getElementById("tabbar").innerHTML =
     '<div class="tabbar">' +
     items.map(it =>
@@ -881,7 +884,7 @@ function fteSubTabBar(){
 }
 function setTab(id){
   if(id === "fte") id = lastFteSubTab;
-  if(ADMIN_ONLY_TABS.indexOf(id) >= 0 && !isAdmin()) id = "dashboard";
+  if(ADMIN_ONLY_TABS.indexOf(id) >= 0 && !isSysAdmin()) id = "dashboard";
   if(FTE_SUB_TABS.some(s => s.id === id)) lastFteSubTab = id;
   state.tab = id; renderTabBar(); renderTabContent();
 }
@@ -907,7 +910,7 @@ function renderTabContentPreserveFocus(){
 
 function renderTabContent(){
   // 뷰어(또는 역할 전환 직후)에는 관리 탭이 없으므로, 그 탭에 머물러 있었다면 첫 화면으로 돌린다.
-  if(ADMIN_ONLY_TABS.indexOf(state.tab) >= 0 && !isAdmin()){ state.tab = "dashboard"; renderTabBar(); }
+  if(ADMIN_ONLY_TABS.indexOf(state.tab) >= 0 && !isSysAdmin()){ state.tab = "dashboard"; renderTabBar(); }
   ctmsSyncEditMode();
   const el = document.getElementById("tabcontent");
   if(state.tab === "dashboard") el.innerHTML = renderDashboard();

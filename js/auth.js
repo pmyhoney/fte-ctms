@@ -88,7 +88,8 @@ async function afterLogin(){
   }
   currentProfile = data;
   if(!data.approved){ renderPending(); return; }
-  if(data.role === "admin") enterAsAdmin(); else enterAsViewer();
+  // 팀장도 FTE 관리·CTMS·재택은 관리자와 같은 편집 화면으로 들어간다 (관리자 전용 탭 등은 isSysAdmin으로 구분)
+  if(data.role === "admin" || data.role === "leader") enterAsAdmin(); else enterAsViewer();
 }
 
 function renderPending(){
