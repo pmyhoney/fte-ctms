@@ -1,5 +1,5 @@
 /* ---------------- IIT 관리 탭 ----------------
-   'FTE 관리 > 과제 배정'의 과제(공동 배정·인수인계는 한 과제)는 자동으로 목록에 보이고,
+   'FTE 관리 > 과제 배정'에서 과제 유형이 IIT[SC]·IIT[PC]인 과제(공동 배정·인수인계는 한 과제)는 자동으로 목록에 보이고,
    품목·과제명·담당자·과제 유형·기간은 배정에서 그대로 끌어온다 (수정은 과제 배정 탭에서).
    과제코드·기관명·연구자명·지원범위·진행 현황·Publication은 이 탭에서 입력해 Supabase(iit_projects)에 저장하고,
    배정에 없는 과제는 이 탭에서 직접 추가할 수 있다 — supabase/migrations/20261102000000_iit_projects.sql */
@@ -26,14 +26,18 @@ async function iitLoad(){
 function iitReload(){ iit.rows = null; renderTabContent(); }
 function iitReset(){ iit.rows = null; iit.f = IIT_EMPTY_F(); }
 
-// 배정 과제 → 목록 항목 (공동 배정·인수인계 레코드는 groupId로 묶어 한 과제로)
+// 과제 유형 이름이 IIT[SC]·IIT[PC]인 것만 (띄어쓰기·괄호 차이는 무시: "IIT SC"도 같은 유형)
+const IIT_TYPE_KEYS = ["IITSC", "IITPC"];
+function isIitTaskType(t){ return !!t && IIT_TYPE_KEYS.includes(String(t.name || "").toUpperCase().replace(/[^A-Z]/g, "")); }
+
+// 배정 과제 → 목록 항목 (공동 배정·인수인계 레코드는 groupId로 묶어 한 과제로), IIT 유형 과제만
 function iitAssignedProjects(){
   const tmap = taskTypeById(), pmap = productById(), out = {};
   fteAssignments().forEach(a => {
     const gid = a.groupId || a.id;
     (out[gid] = out[gid] || []).push(a);
   });
-  return Object.keys(out).map(gid => {
+  return Object.keys(out).filter(gid => out[gid].some(a => isIitTaskType(tmap[a.taskTypeId]))).map(gid => {
     const list = out[gid].sort((x, y) => (x.startPeriod || "").localeCompare(y.startPeriod || ""));
     const last = list[list.length - 1], p = pmap[last.productId], t = tmap[last.taskTypeId];
     const names = [...new Set(list.map(a => { const m = state.members.find(x => x.id === a.memberId); return m ? m.name : ""; }).filter(Boolean))];
@@ -46,12 +50,13 @@ function iitAssignedProjects(){
   });
 }
 
-// 화면에 보일 전체 목록: 배정 과제(+IIT 입력값) / 직접 추가한 과제 / 배정이 지워진 과제(저장해 둔 값으로)
+// 화면에 보일 전체 목록: IIT 유형 배정 과제(+IIT 입력값) / 직접 추가한 과제 / 배정이 지워진 과제(저장해 둔 값으로)
+// 배정에 남아 있지만 IIT 유형이 아닌 과제(유형을 바꾼 경우 등)의 입력값은 목록에 보이지 않는다
 function iitAllRows(){
   const stored = iit.rows || [], byGid = {};
   stored.forEach(r => { if(r.group_id) byGid[r.group_id] = r; });
   const assigned = iitAssignedProjects();
-  const live = new Set(assigned.map(a => a.gid));
+  const live = new Set(state.assignments.map(a => a.groupId || a.id));
   const rows = assigned.map(a => {
     const r = byGid[a.gid], d = r ? r.data : {};
     return Object.assign({}, d, {
@@ -115,7 +120,7 @@ function renderIitTab(){
       '</div>' +
       iitListHtml(list, all.length) +
       '<div style="font-size:11.5px;color:#94A3B8;margin-top:10px;line-height:1.6;">' +
-        '과제 배정 탭에 배정한 과제는 자동으로 목록에 추가되고, 품목명·과제명·담당자는 배정 정보를 그대로 보여줘요 (바꾸려면 과제 배정 탭에서 수정). ' +
+        '과제 배정 탭에서 과제 유형이 IIT[SC]·IIT[PC]인 과제는 자동으로 목록에 추가되고, 품목명·과제명·담당자는 배정 정보를 그대로 보여줘요 (바꾸려면 과제 배정 탭에서 수정). ' +
         '진행 현황을 따로 고르지 않으면 배정의 과제 상태를 보여줘요.' +
       '</div>' +
     '</div>' +
