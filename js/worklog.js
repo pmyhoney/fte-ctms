@@ -22,7 +22,7 @@ async function wfhLoad(){
   const first = ym + "-01";
   const last = ymd(new Date(y, m, 0));
   const me = currentProfile.id;
-  let query = sb.from("wfh_days").select("user_id,user_name,day,kind,journal").gte("day", first).lte("day", last);
+  let query = sb.from("wfh_days").select("id,user_id,user_name,day,kind,journal").gte("day", first).lte("day", last);
   if(!isAdmin()) query = query.eq("user_id", me);
   const { data, error } = await query;
   if(error){ showToast("재택 일정을 불러오지 못했어요: " + error.message, { error: true }); return; }
@@ -36,7 +36,7 @@ async function wfhLoad(){
   data.forEach(r => {
     const kind = WFH_KIND[r.kind] ? r.kind : "full";
     if(r.user_id === me) wfh.days[r.day] = { kind, journal: r.journal || "" };
-    else if(isAdmin()) (wfh.others[r.day] = wfh.others[r.day] || []).push({ name: wfhName(r, wfh.names), kind, journal: r.journal || "" });
+    else if(isAdmin()) (wfh.others[r.day] = wfh.others[r.day] || []).push({ id: r.id, name: wfhName(r, wfh.names), kind, journal: r.journal || "" });
   });
   Object.keys(wfh.others).forEach(k => wfh.others[k].sort((a, b) => a.name.localeCompare(b.name, "ko")));
   wfh.loadedYm = ym;
@@ -102,26 +102,60 @@ function renderWfhTab(){
     '</div>' +
     '<div style="font-size:12px;color:#94A3B8;margin-top:12px;line-height:1.6;">' +
       '날짜를 누르면 반일·종일을 골라 재택을 신청하거나 취소할 수 있어요. 재택 당일(또는 지난 재택일)을 누르면 업무 일지를 쓸 수 있어요.' +
-      (isAdmin() ? '<br/>관리자·팀장 화면이라 다른 팀원의 재택 신청도 이름으로 함께 보여요. 이름을 누르면 그 사람의 업무 일지를 볼 수 있어요.' : '') +
+      (isAdmin() ? '<br/>관리자·팀장 화면이라 다른 팀원의 재택 신청도 이름으로 함께 보여요. 이름을 누르면 그 사람의 업무 일지를 볼 수 있어요.' +
+        (isSysAdmin() ? ' 관리자는 일지 창에서 재택 일정이나 일지를 삭제할 수 있어요.' : '') : '') +
     '</div>' +
   '</div>';
 }
 
-// 관리자: 다른 팀원의 업무 일지 보기 (읽기 전용)
+// 관리자·팀장: 다른 팀원의 업무 일지 보기 (관리자는 재택 일정·일지 삭제 가능)
 function wfhOtherOpen(key, i){
   const o = wfh.others[key][i];
+  const delBtn = (what, label) => '<button class="add-btn" style="flex:1;justify-content:center;background:#fff;color:#B91C1C;border:1px solid #F3B8B8;" onclick="wfhAdminDeleteConfirm(\'' + key + '\',' + i + ',\'' + what + '\')">' + label + '</button>';
   showModal(
     '<div style="font-weight:800;font-size:14px;margin-bottom:4px;">' + esc(o.name) + ' 업무 일지</div>' +
     '<div style="font-size:12px;color:#94A3B8;margin-bottom:10px;">' + key + ' 재택근무 (' + WFH_KIND[o.kind] + ')</div>' +
     '<div style="max-height:320px;overflow-y:auto;white-space:pre-wrap;font-size:13px;line-height:1.6;color:#334155;background:#F8FAFC;border-radius:8px;padding:10px 12px;">' +
       (o.journal ? esc(o.journal) : '<span style="color:#94A3B8;">아직 작성한 일지가 없어요.</span>') +
     '</div>' +
+    (isSysAdmin() ? '<div style="display:flex;gap:8px;margin-top:12px;">' + (o.journal ? delBtn("journal", "일지 삭제") : '') + delBtn("day", "재택 일정 삭제") + '</div>' : '') +
     '<div style="display:flex;gap:8px;margin-top:12px;">' +
       (wfh.others[key].length > 1 ? '<button class="add-btn" style="flex:1;justify-content:center;background:#fff;color:var(--accent);border:1px solid var(--accent);" onclick="wfhDayListOpen(\'' + key + '\')">이날 재택 전체</button>' : '') +
       '<button class="add-btn" style="flex:1;justify-content:center;background:#fff;color:#475569;border:1px solid var(--border);" onclick="closeModal()">닫기</button>' +
     '</div>'
   );
 }
+// 관리자: 다른 팀원의 재택 일정(일지 포함) 또는 일지만 삭제
+function wfhAdminDeleteConfirm(key, i, what){
+  const o = wfh.others[key][i];
+  const day = what === "day";
+  showModal(
+    '<div style="font-weight:800;font-size:14px;margin-bottom:8px;">' + (day ? '재택 일정 삭제' : '업무 일지 삭제') + '</div>' +
+    '<div style="font-size:12.5px;color:#475569;line-height:1.6;margin-bottom:16px;"><b>' + esc(o.name) + '</b>님의 ' + key + ' ' +
+      (day ? '재택 일정을 삭제할까요?' + (o.journal ? '<br/>작성한 업무 일지도 함께 지워져요.' : '') : '업무 일지를 삭제할까요?<br/>재택 일정은 그대로 남아요.') +
+      '<br/>삭제한 내용은 되돌릴 수 없어요.</div>' +
+    '<div style="display:flex;gap:8px;">' +
+      '<button class="add-btn" style="flex:1;justify-content:center;background:#fff;color:#475569;border:1px solid var(--border);" onclick="wfhOtherOpen(\'' + key + '\',' + i + ')">돌아가기</button>' +
+      '<button class="add-btn" style="flex:1;justify-content:center;background:var(--danger);" onclick="wfhAdminDelete(\'' + key + '\',' + i + ',\'' + what + '\')">삭제</button>' +
+    '</div>'
+  );
+}
+async function wfhAdminDelete(key, i, what){
+  const o = wfh.others[key][i];
+  const q = what === "day"
+    ? sb.from("wfh_days").delete().eq("id", o.id).select("id")
+    : sb.from("wfh_days").update({ journal: "", updated_at: new Date().toISOString() }).eq("id", o.id).select("id");
+  const { data, error } = await q;
+  if(error || !data || data.length === 0){ showToast("삭제하지 못했어요" + (error ? ": " + error.message : " (권한이 없어요)"), { error: true }); return; }
+  if(what === "day"){
+    wfh.others[key].splice(i, 1);
+    if(wfh.others[key].length === 0) delete wfh.others[key];
+  } else o.journal = "";
+  closeModal();
+  showToast(o.name + "님의 " + key + (what === "day" ? " 재택 일정을 삭제했어요" : " 업무 일지를 삭제했어요"));
+  renderTabContent();
+}
+
 function wfhDayListOpen(key){
   showModal(
     '<div style="font-weight:800;font-size:14px;margin-bottom:4px;">' + key + ' 재택 인원</div>' +
@@ -204,7 +238,8 @@ function wfhJournalOpen(key){
     '<div style="font-size:12px;color:#94A3B8;margin-bottom:10px;">' + key + ' 재택근무 (' + WFH_KIND[rec.kind] + ')</div>' +
     '<textarea id="wfh-journal" class="input" rows="10" style="resize:vertical;line-height:1.5;" placeholder="오늘 한 업무를 적어 주세요">' + esc(rec.journal) + '</textarea>' +
     '<div style="display:flex;gap:8px;margin-top:12px;">' +
-      (key === todayYmd() ? '<button class="add-btn" style="background:#fff;color:var(--accent);border:1px solid var(--accent);" onclick="wfhPlanOpen(\'' + key + '\')">변경·취소</button>' : '') +
+      (key === todayYmd() ? '<button class="add-btn" style="background:#fff;color:var(--accent);border:1px solid var(--accent);" onclick="wfhPlanOpen(\'' + key + '\')">변경·취소</button>' :
+        isSysAdmin() ? '<button class="add-btn" style="background:#fff;color:#B91C1C;border:1px solid #F3B8B8;" onclick="wfhCancel(\'' + key + '\')">재택 삭제</button>' : '') + // 지난 재택은 관리자만 삭제
       '<button class="add-btn" style="flex:1;justify-content:center;background:#fff;color:#475569;border:1px solid var(--border);" onclick="closeModal()">닫기</button>' +
       '<button class="add-btn" style="flex:1;justify-content:center;" onclick="wfhJournalSave(\'' + key + '\')">저장</button>' +
     '</div>'
