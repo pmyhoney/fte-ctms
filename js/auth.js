@@ -117,6 +117,7 @@ async function logout(reason){
   currentProfile = null;
   profilesCache = null;
   worklogReset(); // worklog.js
+  kolReset(); // kol.js
   Object.assign(state, {
     role: null, loaded: false, dirty: false, saveError: false, saveBlocked: false,
     taskTypes: [], members: [], products: [], assignments: [], activityLog: [],

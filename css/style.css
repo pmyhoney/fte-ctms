@@ -118,3 +118,30 @@ body.save-blocked #tabcontent input:not(.view-ok){pointer-events:none;background
 .tr-chip{display:inline-block;font-size:11.5px;font-weight:700;padding:2px 8px;border-radius:999px;}
 .tr-chip.in{background:#ECEAF8;color:#5A4FA3;}
 .tr-chip.out{background:#DDF1F0;color:#0F6E6E;}
+/* KOL 탭 (kol.js) */
+.kol-stats{grid-template-columns:repeat(4,minmax(0,1fr));}
+.kol-chips{display:flex;gap:6px;overflow-x:auto;padding-bottom:8px;margin-bottom:6px;}
+.kol-chip{flex:0 0 auto;border:1px solid var(--border);background:#fff;color:#475569;font-size:12.5px;font-weight:600;
+  padding:5px 11px;border-radius:999px;white-space:nowrap;}
+.kol-chip span{font-size:11px;opacity:.7;margin-left:4px;}
+.kol-chip.on{background:var(--accent);border-color:var(--accent);color:#fff;}
+.kol-trial-tag{display:inline-block;font-size:10.5px;font-weight:700;color:var(--accent);background:#E5F1F1;
+  padding:1px 8px;border-radius:999px;white-space:nowrap;}
+.kol-card{border:1px solid var(--border);border-radius:10px;margin-bottom:6px;}
+.kol-card.open{border-color:var(--accent);}
+.kol-head{display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;}
+.kol-chev{color:#94A3B8;display:flex;transition:transform .15s;}
+.kol-card.open .kol-chev{transform:rotate(90deg);color:var(--accent);}
+.kol-pill{font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:999px;background:#EEF2F6;color:#475569;}
+.kol-pill.chair{background:var(--ink);color:#fff;}
+.kol-pill.standing{background:#E5F1F1;color:var(--accent);}
+.kol-detail{border-top:1px solid var(--border);padding:12px 14px;font-size:13px;line-height:1.65;word-break:keep-all;}
+.kol-detail-row{margin-bottom:10px;}
+.kol-detail-row:last-child{margin-bottom:0;}
+.kol-eval{position:relative;font-size:14px;cursor:pointer;line-height:1;}
+.kol-eval-tip{display:none;position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);z-index:20;
+  background:var(--ink);color:#fff;font-size:11.5px;font-weight:500;line-height:1.6;padding:8px 11px;border-radius:8px;
+  width:max-content;max-width:220px;}
+.kol-eval-tip b{display:block;font-size:11px;color:#9FD3D8;margin-bottom:3px;}
+.kol-eval:hover .kol-eval-tip,.kol-eval.show .kol-eval-tip{display:block;}
+@media (max-width:640px){ .kol-stats{grid-template-columns:repeat(2,minmax(0,1fr));} }

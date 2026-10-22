@@ -854,6 +854,7 @@ function renderTabBar(){
     { id: "wfh", label: "재택", icon: "calendar", writerOnly: true }, // 뷰어는 본인 재택 기록이 없으므로 숨김
     { id: "weekly", label: "주간보고", icon: "edit" },
     { id: "training", label: "교육", icon: "book" },
+    { id: "kol", label: "KOL", icon: "users" }, // 승인 회원 누구나 조회 (kol.js)
     { id: "members", label: "팀원 관리", icon: "users", adminOnly: true },
     { id: "types", label: "과제 유형", icon: "list", adminOnly: true },
     { id: "products", label: "품목 관리", icon: "box", adminOnly: true },
@@ -924,6 +925,7 @@ function renderTabContent(){
   else if(state.tab === "wfh") el.innerHTML = renderWfhTab(); // worklog.js
   else if(state.tab === "weekly") el.innerHTML = renderWeeklyTab(); // worklog.js
   else if(state.tab === "training") el.innerHTML = renderTrainingTab(); // worklog.js
+  else if(state.tab === "kol") el.innerHTML = renderKolTab(); // kol.js
   if(FTE_SUB_TABS.some(s => s.id === state.tab)) el.insertAdjacentHTML("afterbegin", fteSubTabBar());
   if(state.tab === "assign") wireAssignTab();
 }
