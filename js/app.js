@@ -586,6 +586,7 @@ const EXPORT_SECTIONS = [
   { key: "wfh", label: "재택", writerOnly: true }, // 뷰어는 재택 기록이 없으므로 숨김 (탭과 같은 기준)
   { key: "weekly", label: "주간보고" },
   { key: "training", label: "교육" },
+  { key: "iit", label: "IIT 관리" },
 ];
 function exportSections(){ return EXPORT_SECTIONS.filter(s => !s.writerOnly || canWrite()); }
 
@@ -634,6 +635,7 @@ async function exportExcel(keys){
   if(keys.includes("fte")) fteExportSheets(wb);
   if(keys.includes("ctms")) ctmsExportSheets(wb);
   await worklogExportSheets(wb, keys); // worklog.js — 재택·주간보고·교육 (Supabase에서 불러옴)
+  if(keys.includes("iit")) await iitExportSheets(wb); // iit.js
   const all = exportSections().every(s => keys.includes(s.key));
   const label = all ? "전체" : EXPORT_SECTIONS.filter(s => keys.includes(s.key)).map(s => s.label.replace(/\s/g, "")).join("_");
   const xlsxData = XLSX.write(wb, { bookType: "xlsx", type: "array" });
@@ -855,6 +857,7 @@ function renderTabBar(){
     { id: "weekly", label: "주간보고", icon: "edit" },
     { id: "training", label: "교육", icon: "book" },
     { id: "kol", label: "KOL", icon: "users" }, // 승인 회원 누구나 조회 (kol.js)
+    { id: "iit", label: "IIT 관리", icon: "clipboard" }, // 승인 회원 누구나 조회, 뷰어 외 편집 (iit.js)
     { id: "members", label: "팀원 관리", icon: "users", adminOnly: true },
     { id: "types", label: "과제 유형", icon: "list", adminOnly: true },
     { id: "products", label: "품목 관리", icon: "box", adminOnly: true },
@@ -926,6 +929,7 @@ function renderTabContent(){
   else if(state.tab === "weekly") el.innerHTML = renderWeeklyTab(); // worklog.js
   else if(state.tab === "training") el.innerHTML = renderTrainingTab(); // worklog.js
   else if(state.tab === "kol") el.innerHTML = renderKolTab(); // kol.js
+  else if(state.tab === "iit") el.innerHTML = renderIitTab(); // iit.js
   if(FTE_SUB_TABS.some(s => s.id === state.tab)) el.insertAdjacentHTML("afterbegin", fteSubTabBar());
   if(state.tab === "assign") wireAssignTab();
 }
