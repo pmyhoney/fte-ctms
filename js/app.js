@@ -3201,7 +3201,7 @@ function ctmsEditEntry(gid, id){
         hist.map(h => '<div style="padding:5px 0;border-bottom:1px solid #F1F5F9;"><span style="color:#94A3B8;">' + ctmsTimeLabel(h.time) + '</span><br/>전: ' + esc(h.before) + '<br/>후: ' + esc(h.after) + '</div>').join("") + '</div>' : '') +
       ctmsSheetField("진행상황 내용", '<textarea id="ctms-e-title" class="input" rows="4" style="font-size:13px;">' + esc(e.title) + '</textarea>') +
       '<div id="ctms-sheet-err" style="display:none;font-size:12px;color:var(--danger);"></div>' +
-      ctmsSheetButtons("ctmsDeleteEntry('" + gid + "','" + id + "')"));
+      ctmsSheetButtons("ctmsDeleteEntry('" + gid + "','" + id + "')"), "md");
     document.getElementById("ctms-sheet-save").onclick = () => ctmsSaveProgress(gid, id);
     return;
   }
@@ -3222,7 +3222,7 @@ function ctmsEditEntry(gid, id){
     ctmsSheetField("조치 내용 (선택)", '<textarea id="ctms-e-note" class="input" rows="2" placeholder="원인, 조치 경과 등" style="font-size:13px;">' + esc(e.note || "") + '</textarea>') +
     '<button class="add-btn" style="width:100%;justify-content:center;background:#fff;color:#B45309;border:1px solid #F1D9B5;margin-bottom:4px;" onclick="ctmsOpenFollowUp(\'' + gid + '\',\'' + id + '\')">F/U(후속조치) 관리 · ' + (e.followUps || []).length + '건</button>' +
     '<div id="ctms-sheet-err" style="display:none;font-size:12px;color:var(--danger);"></div>' +
-    ctmsSheetButtons("ctmsDeleteEntry('" + gid + "','" + id + "')"));
+    ctmsSheetButtons("ctmsDeleteEntry('" + gid + "','" + id + "')"), "md");
   document.getElementById("ctms-sheet-save").onclick = () => ctmsSaveIssue(gid, id);
 }
 function ctmsSheetError(msg){ const el = document.getElementById("ctms-sheet-err"); if(el){ el.textContent = msg; el.style.display = "block"; } }
@@ -3285,7 +3285,7 @@ function ctmsOpenFollowUp(gid, id){
     '<div style="font-size:11.5px;font-weight:700;color:#64748B;margin:14px 0 6px;">F/U 이력 (' + fus.length + '건)</div>' +
     '<div style="max-height:160px;overflow-y:auto;">' + (fus.length ? fus.map(f => '<div style="padding:6px 0;border-bottom:1px solid #F1F5F9;font-size:12px;"><span style="color:#94A3B8;">' + ctmsTimeLabel(f.time) + '</span>' +
       (f.targetDate ? ' · <b>목표 ' + f.targetDate + '</b>' : '') + '<div style="white-space:pre-wrap;margin-top:2px;">' + esc(f.content) + '</div></div>').join("") : '<div style="font-size:12px;color:#94A3B8;">등록된 F/U 이력이 없어요.</div>') + '</div>' +
-    '<button class="add-btn" style="width:100%;justify-content:center;background:#fff;color:#475569;border:1px solid var(--border);margin-top:12px;" onclick="ctmsEditEntry(\'' + gid + '\',\'' + id + '\')">← 이슈로 돌아가기</button>');
+    '<button class="add-btn" style="width:100%;justify-content:center;background:#fff;color:#475569;border:1px solid var(--border);margin-top:12px;" onclick="ctmsEditEntry(\'' + gid + '\',\'' + id + '\')">← 이슈로 돌아가기</button>', "md");
 }
 function ctmsFuNeeded(gid, id, on){
   if(!ctmsCanEdit(gid)) return;
@@ -3420,7 +3420,7 @@ function ctmsCostCellRender(){
     rows +
     ctmsSheetField("변경 사유 (입력·수정 시 필수)", '<textarea id="ctms-cell-reason" class="input" rows="2" placeholder="예: 대상자 추가 모집으로 조정" style="font-size:13px;"></textarea>') +
     '<div id="ctms-sheet-err" style="display:none;font-size:12px;color:var(--danger);"></div>' +
-    ctmsSheetButtons(null));
+    ctmsSheetButtons(null), "md");
   document.getElementById("ctms-sheet-save").onclick = ctmsCostCellSave;
 }
 function ctmsCostCellSave(){
@@ -3504,10 +3504,10 @@ function ctmsCostSheetRender(){
     '<div style="display:flex;gap:8px;margin-bottom:10px;">' +
       '<select class="input" onchange="ctmsCostSheetChange(\'category\',this.value)" style="flex:1.2;font-size:13px;padding:7px 8px;">' + CTMS_COST_CATS.map(c => '<option value="' + c + '"' + (c === d.category ? " selected" : "") + '>' + c + '</option>').join("") + '</select>' +
       '<div style="flex:1;display:flex;gap:4px;">' + kindBtn("plan", "계획") + kindBtn("actual", "집행") + '</div></div>' +
-    '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:10px;">' + cells + '</div>' +
+    '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(80px,1fr));gap:6px;margin-bottom:10px;">' + cells + '</div>' +
     ctmsSheetField("변경 사유 (계획을 바꿀 때 필수)", '<textarea id="ctms-cost-reason" class="input" rows="2" placeholder="예: 하반기 대상자 추가 모집 반영" style="font-size:13px;"></textarea>') +
     '<div id="ctms-sheet-err" style="display:none;font-size:12px;color:var(--danger);"></div>' +
-    ctmsSheetButtons(null));
+    ctmsSheetButtons(null), "md");
   document.getElementById("ctms-sheet-save").onclick = ctmsCostSave;
 }
 function ctmsCostSave(){

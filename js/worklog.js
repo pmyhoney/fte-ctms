@@ -573,7 +573,7 @@ function txEditOpen(id){
     '<div style="display:flex;gap:8px;margin-top:6px;">' +
       '<button class="add-btn" style="flex:1;justify-content:center;background:#fff;color:#475569;border:1px solid var(--border);" onclick="closeModal()">취소</button>' +
       '<button class="add-btn" id="txe-save" style="flex:1;justify-content:center;" onclick="txSave(' + (s ? '\'' + s.id + '\'' : 'null') + ')">저장</button>' +
-    '</div>'
+    '</div>', "md"
   );
 }
 async function txSave(id){
@@ -665,13 +665,13 @@ function trainingEditOpen(id){
     list.map(o => '<option value="' + o[0] + '"' + ((r ? r[k] : d) === o[0] ? ' selected' : '') + '>' + o[1] + '</option>').join("") + '</select>';
   showModal(
     '<div style="font-weight:800;font-size:14px;margin-bottom:12px;">' + (r ? '교육 이력 수정' : '교육 이력 등록') + '</div>' +
-    '<div style="max-height:62vh;overflow-y:auto;">' +
-      '<div class="wk-form" style="grid-template-columns:1fr 1fr;">' +
+    '<div class="modal-scroll">' +
+      '<div class="wk-form" style="grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,2fr);">' +
         field("팀원 *", input("member", "text", "이름", currentProfile ? currentProfile.name : "")) +
         field("이수일 *", input("edu_date", "date", "", "")) +
+        field("교육명 *", input("title", "text", "예: ICH E6(R3) GCP 개정 교육", "")) +
       '</div>' +
-      field("교육명 *", input("title", "text", "예: ICH E6(R3) GCP 개정 교육", "")) +
-      '<div class="wk-form" style="grid-template-columns:1fr 1fr;">' +
+      '<div class="wk-form" style="grid-template-columns:repeat(4,minmax(0,1fr));">' +
         field("주관 (부서·기관)", input("org", "text", "예: QA팀 / KoNECT", "")) +
         field("교육 시간 (h)", input("hours", "number", "", "")) +
         field("구분 *", select("scope", [["사내", "사내"], ["사외", "사외"]], "사내")) +
@@ -680,7 +680,7 @@ function trainingEditOpen(id){
       '<div id="tre-txbox" style="border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:12px;background:#F8FAFC;">' +
         '<div style="font-weight:700;font-size:13px;margin-bottom:8px;">팀내 전달교육 <span style="font-size:11.5px;color:#94A3B8;font-weight:600;">사외 교육만 해당</span></div>' +
         '<label style="display:flex;gap:6px;align-items:center;font-size:13px;margin-bottom:8px;"><input type="checkbox" id="tre-tx_need" onchange="trainingSync()"' + (r ? (r.tx_need ? ' checked' : '') : ' checked') + '/> 전달교육 대상 (팀내 공유 필요)</label>' +
-        '<div id="tre-txdetail">' +
+        '<div id="tre-txdetail" class="wk-form" style="grid-template-columns:repeat(3,minmax(0,1fr));">' +
           field("진행 상태", select("tx_status", [["todo", "미계획"], ["plan", "계획"], ["done", "완료"]], "todo")) +
           '<div id="tre-planwrap">' + field("전달교육 계획일 *", input("tx_plan_date", "date", "", "")) + '</div>' +
           '<div id="tre-donewrap">' + field("전달교육 실시일 *", input("tx_done_date", "date", "", "")) + '</div>' +
@@ -691,7 +691,7 @@ function trainingEditOpen(id){
     '<div style="display:flex;gap:8px;margin-top:6px;">' +
       '<button class="add-btn" style="flex:1;justify-content:center;background:#fff;color:#475569;border:1px solid var(--border);" onclick="closeModal()">취소</button>' +
       '<button class="add-btn" id="tre-save" style="flex:1;justify-content:center;" onclick="trainingSave(' + (r ? '\'' + r.id + '\'' : 'null') + ')">저장</button>' +
-    '</div>'
+    '</div>', "wide"
   );
   if(r && r.tx_status) document.getElementById("tre-tx_status").value = r.tx_status;
   trainingSync();

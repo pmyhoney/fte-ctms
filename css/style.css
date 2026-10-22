@@ -97,7 +97,7 @@ td.name-cell{font-weight:700;text-align:left;position:sticky;left:0;background:#
 @media (max-width:600px){
   .modal-overlay.md,.modal-overlay.wide{padding:8px;}
   .modal-card.md,.modal-card.wide{padding:16px 14px;border-radius:12px;}
-  .modal-card.wide .wk-form{grid-template-columns:minmax(0,1fr) !important;}
+  .modal-card.wide .wk-form,.modal-card.md .wk-form{grid-template-columns:minmax(0,1fr) !important;}
   .modal-scroll{max-height:calc(100vh - 150px);}
 }
 body.role-viewer:not(.ctms-edit) #tabcontent button:not(.view-ok),
