@@ -1873,7 +1873,8 @@ function deleteProfileConfirm(id){
   showModal(
     '<div style="font-weight:800;font-size:14px;margin-bottom:8px;color:var(--danger);">회원 삭제</div>' +
     '<div style="font-size:12.5px;color:#475569;line-height:1.6;margin-bottom:16px;"><b>'+esc(p.name)+'</b>('+esc(p.login_id)+') 계정을 삭제할까요? 되돌릴 수 없어요.<br/>' +
-      '이 사람이 입력한 주간보고·교육 이력·전달교육 기록은 남고, 이후에는 관리자만 수정·삭제할 수 있어요. 재택 기록은 함께 삭제돼요.</div>' +
+      '이 사람이 입력한 주간보고·교육 이력·전달교육 기록은 남고, 이후에는 관리자만 수정·삭제할 수 있어요.<br/>' +
+      '재택은 내일 이후 계획만 삭제되고, 오늘까지의 재택 이력·업무 일지는 남아 관리자 화면과 엑셀에 \'(삭제된 회원)\'으로 표시돼요.</div>' +
     '<div style="display:flex;gap:8px;">' +
       '<button class="add-btn" style="flex:1;justify-content:center;background:#fff;color:#475569;border:1px solid var(--border);" onclick="closeModal()">취소</button>' +
       '<button class="add-btn" style="flex:1;justify-content:center;background:var(--danger);" onclick="deleteProfile(\''+id+'\')">삭제</button>' +

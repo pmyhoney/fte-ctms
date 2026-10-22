@@ -22,7 +22,7 @@ async function wfhLoad(){
   const first = ym + "-01";
   const last = ymd(new Date(y, m, 0));
   const me = currentProfile.id;
-  let query = sb.from("wfh_days").select("user_id,day,kind,journal").gte("day", first).lte("day", last);
+  let query = sb.from("wfh_days").select("user_id,user_name,day,kind,journal").gte("day", first).lte("day", last);
   if(!isAdmin()) query = query.eq("user_id", me);
   const { data, error } = await query;
   if(error){ showToast("재택 일정을 불러오지 못했어요: " + error.message, { error: true }); return; }
@@ -36,11 +36,17 @@ async function wfhLoad(){
   data.forEach(r => {
     const kind = WFH_KIND[r.kind] ? r.kind : "full";
     if(r.user_id === me) wfh.days[r.day] = { kind, journal: r.journal || "" };
-    else if(isAdmin()) (wfh.others[r.day] = wfh.others[r.day] || []).push({ name: (wfh.names && wfh.names[r.user_id]) || "이름 없음", kind, journal: r.journal || "" });
+    else if(isAdmin()) (wfh.others[r.day] = wfh.others[r.day] || []).push({ name: wfhName(r, wfh.names), kind, journal: r.journal || "" });
   });
   Object.keys(wfh.others).forEach(k => wfh.others[k].sort((a, b) => a.name.localeCompare(b.name, "ko")));
   wfh.loadedYm = ym;
   if(state.tab === "wfh") renderTabContent();
+}
+
+// 삭제된 회원의 남은 재택 이력은 작성자(user_id)가 비고 이름만 user_name에 남아 있다
+function wfhName(r, names){
+  if(!r.user_id) return (r.user_name || "이름 없음") + " (삭제된 회원)";
+  return (names && names[r.user_id]) || "이름 없음";
 }
 
 function wfhMove(delta){
@@ -762,7 +768,7 @@ async function worklogExportSheets(wb, keys){
     const me = currentProfile.id;
     const myName = currentProfile.name || currentProfile.login_id;
     const data = await sbFetchAll(() => {
-      const q = sb.from("wfh_days").select("user_id,day,kind,journal").order("day").order("user_id");
+      const q = sb.from("wfh_days").select("user_id,user_name,day,kind,journal").order("day").order("user_id");
       return isAdmin() ? q : q.eq("user_id", me);
     });
     let names = {};
@@ -770,7 +776,7 @@ async function worklogExportSheets(wb, keys){
       const res = await sb.from("profiles").select("id,name,login_id");
       (res.data || []).forEach(p => names[p.id] = p.name || p.login_id);
     }
-    const rows = data.map(r => ({ day: r.day, name: r.user_id === me ? myName : (names[r.user_id] || "이름 없음"), kind: r.kind, journal: r.journal }));
+    const rows = data.map(r => ({ day: r.day, name: r.user_id === me ? myName : wfhName(r, names), kind: r.kind, journal: r.journal }));
     rows.sort((a, b) => a.day.localeCompare(b.day) || a.name.localeCompare(b.name, "ko"));
     XLSX.utils.book_append_sheet(wb, wfhSheet(rows), "재택·일지");
   }
