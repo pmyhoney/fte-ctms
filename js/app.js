@@ -1420,12 +1420,27 @@ function coAssignBtnHtml(a){
     icon('users',13) +
   '</button>';
 }
+// 과제 배정 목록의 그룹 배지: '공동'은 이번 달에 실제로 함께 수행 중인 인원만 센다.
+// 종료월이 지난 담당자(인수인계 전 담당자 등)는 '종료', 시작월 전인 담당자는 '예정'으로 따로 표시한다.
+function assignGroupBadgesHtml(members, period){
+  const active = members.filter(x => isActive(x, period)).length;
+  const ended = members.filter(x => x.endPeriod && x.endPeriod < period).length;
+  const upcoming = members.filter(x => x.startPeriod && x.startPeriod > period).length;
+  const badge = (text, bg, color) => '<span style="font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:999px;background:'+bg+';color:'+color+';white-space:nowrap;">'+text+'</span>';
+  return (active > 1 ? badge('공동 '+active+'명', 'var(--msl-soft)', 'var(--msl)') : '') +
+    (members.length > 1 && ended > 0 ? badge('종료 '+ended+'명', '#EEF2F6', '#64748B') : '') +
+    (members.length > 1 && upcoming > 0 ? badge('예정 '+upcoming+'명', '#FEF3E2', '#B45309') : '');
+}
 function memberSubRowHtml(a){
   const m = state.members.find(x => x.id === a.memberId);
+  const now = currentPeriod();
+  const ended = a.endPeriod && a.endPeriod < now, upcoming = a.startPeriod && a.startPeriod > now;
   return '<div style="margin-bottom:6px;">' +
     '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 8px;background:#F8FAFC;border-radius:6px;flex-wrap:wrap;">' +
       '<div style="display:flex;align-items:center;gap:6px;min-width:0;">' +
-        '<span style="font-weight:600;font-size:12.5px;">'+(m?esc(m.name):"삭제된 팀원")+'</span>' +
+        '<span style="font-weight:600;font-size:12.5px;'+(ended?'color:#94A3B8;':'')+'">'+(m?esc(m.name):"삭제된 팀원")+'</span>' +
+        (ended ? '<span style="font-size:10.5px;font-weight:700;padding:1px 6px;border-radius:999px;background:#EEF2F6;color:#64748B;">배정 종료</span>' :
+          upcoming ? '<span style="font-size:10.5px;font-weight:700;padding:1px 6px;border-radius:999px;background:#FEF3E2;color:#B45309;">시작 예정</span>' : '') +
         '<span style="color:#94A3B8;font-size:11px;white-space:nowrap;">'+a.startPeriod+'~'+(a.endPeriod||"진행중")+'</span>' +
       '</div>' +
       '<div style="display:flex;align-items:center;gap:8px;flex:0 0 auto;">' +
@@ -1642,7 +1657,7 @@ function renderAssignTab(){
             'border:1px solid transparent;border-radius:6px;background:transparent;padding:3px 6px;vertical-align:middle;" ' +
             'onfocus="this.style.borderColor=\'var(--border)\';this.style.background=\'#fff\';" ' +
             'onblur="this.style.borderColor=\'transparent\';this.style.background=\'transparent\';"/>' +
-            (g.members.length > 1 ? '<span style="font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:999px;background:var(--msl-soft);color:var(--msl);white-space:nowrap;">공동/인수인계 '+g.members.length+'명</span>' : '') +
+            assignGroupBadgesHtml(g.members, today) +
             coAssignBtnHtml(primary) +
           '</div>' +
           '<select onchange="updateGroupTaskType(\''+g.gid+'\', this.value)" style="flex:0 0 auto;padding:5px 8px;border-radius:6px;border:1px solid var(--border);font-size:12px;max-width:100%;background:#F8FAFC;color:#475569;">' +

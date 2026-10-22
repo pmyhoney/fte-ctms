@@ -40,7 +40,9 @@ function iitAssignedProjects(){
   return Object.keys(out).filter(gid => out[gid].some(a => isIitTaskType(tmap[a.taskTypeId]))).map(gid => {
     const list = out[gid].sort((x, y) => (x.startPeriod || "").localeCompare(y.startPeriod || ""));
     const last = list[list.length - 1], p = pmap[last.productId], t = tmap[last.taskTypeId];
-    const names = [...new Set(list.map(a => { const m = state.members.find(x => x.id === a.memberId); return m ? m.name : ""; }).filter(Boolean))];
+    // 담당자는 이번 달에 실제로 수행 중인 사람만 (종료된 전 담당자 제외, 수행 중인 사람이 없으면 전체)
+    const now = currentPeriod(), activeNow = list.filter(a => isActive(a, now));
+    const names = [...new Set((activeNow.length ? activeNow : list).map(a => { const m = state.members.find(x => x.id === a.memberId); return m ? m.name : ""; }).filter(Boolean))];
     const ends = list.map(a => a.endPeriod);
     return {
       gid, product: p ? p.name : "", taskName: last.taskName || "", manager: names.join(", "),
@@ -72,6 +74,12 @@ function iitAllRows(){
   return rows.sort((a, b) => (a.product || "힣").localeCompare(b.product || "힣", "ko") || (a.taskName || "").localeCompare(b.taskName || "", "ko"));
 }
 const iitPubStatus = (r) => (r.pub && r.pub.status) || "미진행";
+// 논문 목록: pub.papers[] (예전 형식 — pub에 저널·제목을 바로 저장한 1편 — 도 읽는다)
+function iitPapers(pub){
+  pub = pub || {};
+  if(Array.isArray(pub.papers)) return pub.papers;
+  return pub.journal || pub.vol || pub.title || pub.url ? [{ journal: pub.journal || "", vol: pub.vol || "", title: pub.title || "", url: pub.url || "" }] : [];
+}
 
 function iitFiltered(all){
   const f = iit.f, q = f.q.trim().toLowerCase();
@@ -144,15 +152,16 @@ function iitSafeUrl(u){
   return /^https?:\/\//i.test(u) ? u : "";
 }
 function iitPubHtml(r){
-  const p = r.pub || {}, st = iitPubStatus(r);
-  let html = '<span style="font-weight:700;color:' + IIT_PUB_COLOR[st] + ';">' + st + '</span>';
-  if(st === "완료" && (p.journal || p.vol || p.title)){
+  const st = iitPubStatus(r), papers = st === "완료" ? iitPapers(r.pub) : [];
+  let html = '<span style="font-weight:700;color:' + IIT_PUB_COLOR[st] + ';">' + st + '</span>' + (papers.length > 1 ? ' <span style="font-size:11px;color:#94A3B8;">' + papers.length + '편</span>' : '');
+  papers.forEach((p, i) => {
     const url = iitSafeUrl(p.url);
     const title = p.title ? (url ? '<a href="' + esc(url) + '" target="_blank" rel="noopener noreferrer" class="view-ok" style="color:var(--accent);text-decoration:underline;">' + esc(p.title) + '</a>' : esc(p.title)) : '';
-    html += '<div style="font-size:11.5px;color:#475569;margin-top:2px;line-height:1.45;">' +
+    html += '<div style="font-size:11.5px;color:#475569;margin-top:4px;line-height:1.45;' + (i > 0 ? 'padding-top:4px;border-top:1px dashed var(--border);' : '') + '">' +
+      (papers.length > 1 ? '<b style="color:#94A3B8;">' + (i + 1) + '.</b> ' : '') +
       [p.journal ? '<i>' + esc(p.journal) + '</i>' : '', p.vol ? 'Vol. ' + esc(p.vol) : ''].filter(Boolean).join(", ") +
       (title ? '<div>' + title + '</div>' : '') + '</div>';
-  }
+  });
   return html;
 }
 
@@ -224,13 +233,9 @@ function iitEditOpen(key){
       field("진행 현황" + (r && r.linked && !r.ownStatus ? ' <span style="font-weight:500;color:#94A3B8;">(고르지 않으면 배정의 과제 상태를 따라가요 — 지금 ' + esc(r.assignStatus || "–") + ')</span>' : ''),
         radios("iit-status", IIT_STATUS, r ? (r.linked ? r.ownStatus : r.status) : "제안")) +
       field("Publication", radios("iit-pub", IIT_PUB, p.status || "미진행", "iitFormSync()")) +
-      '<div id="iit-pubwrap" style="padding:10px;border:1px dashed var(--border);border-radius:8px;background:#F8FAFC;margin-bottom:12px;">' +
-        '<div class="wk-form" style="grid-template-columns:2fr 1fr;">' +
-          field("투고 저널명", input("journal", "예: Journal of Hypertension", p.journal || "")) +
-          field("Vol.", input("vol", "예: 44(3)", p.vol || "")) +
-        '</div>' +
-        field("논문 제목", input("title", "논문 제목", p.title || "")) +
-        field("웹 링크 <span style=\"font-weight:500;color:#94A3B8;\">(있으면 논문 제목을 누르면 열려요)</span>", input("url", "예: https://doi.org/10.xxxx/xxxx", p.url || "")) +
+      '<div id="iit-pubwrap" style="margin-bottom:12px;">' +
+        '<div id="iit-papers"></div>' +
+        '<button class="add-btn" style="width:100%;justify-content:center;background:#fff;color:var(--accent);border:1px dashed var(--accent);" onclick="iitPaperAdd()">' + icon('plus', 13) + ' 논문 추가</button>' +
       '</div>' +
     '</div>' +
     '<div style="display:flex;gap:8px;margin-top:6px;">' +
@@ -238,8 +243,43 @@ function iitEditOpen(key){
       '<button class="add-btn" id="iit-save" style="flex:1;justify-content:center;" onclick="iitSave(' + (r ? '\'' + r.key + '\'' : 'null') + ')">저장</button>' +
     '</div>'
   );
+  iit.formPapers = iitPapers(p).map(x => Object.assign({}, x));
+  if(iit.formPapers.length === 0) iit.formPapers.push({ journal: "", vol: "", title: "", url: "" });
+  iitPapersRender();
   iitFormSync();
 }
+
+// 논문 입력 칸: 추가·삭제할 때마다 입력값을 먼저 iit.formPapers에 옮겨 담고 다시 그린다
+const IIT_PAPER_KEYS = ["journal", "vol", "title", "url"];
+function iitPapersCollect(){
+  iit.formPapers.forEach((p, i) => IIT_PAPER_KEYS.forEach(k => {
+    const el = document.getElementById("iit-p" + i + "-" + k);
+    if(el) p[k] = el.value.trim();
+  }));
+}
+function iitPapersRender(){
+  const box = document.getElementById("iit-papers");
+  if(!box) return;
+  const n = iit.formPapers.length;
+  const field = (label, inner) => '<div class="field"><div class="field-label">' + label + '</div>' + inner + '</div>';
+  const input = (i, k, ph) => '<input id="iit-p' + i + '-' + k + '" class="input" type="text" placeholder="' + ph + '" value="' + esc(iit.formPapers[i][k] || "") + '"/>';
+  box.innerHTML = iit.formPapers.map((p, i) =>
+    '<div style="padding:10px;border:1px dashed var(--border);border-radius:8px;background:#F8FAFC;margin-bottom:8px;">' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">' +
+        '<span style="font-size:12.5px;font-weight:800;color:#475569;">논문 ' + (i + 1) + '</span>' +
+        (n > 1 ? '<button class="icon-btn" title="이 논문 삭제" onclick="iitPaperRemove(' + i + ')">' + icon('trash', 13) + '</button>' : '') +
+      '</div>' +
+      '<div class="wk-form" style="grid-template-columns:2fr 1fr;">' +
+        field("투고 저널명", input(i, "journal", "예: Journal of Hypertension")) +
+        field("Vol.", input(i, "vol", "예: 44(3)")) +
+      '</div>' +
+      field("논문 제목", input(i, "title", "논문 제목")) +
+      field("웹 링크 <span style=\"font-weight:500;color:#94A3B8;\">(있으면 논문 제목을 누르면 열려요)</span>", input(i, "url", "예: https://doi.org/10.xxxx/xxxx")) +
+    '</div>').join("");
+}
+function iitPaperAdd(){ iitPapersCollect(); iit.formPapers.push({ journal: "", vol: "", title: "", url: "" }); iitPapersRender(); }
+function iitPaperRemove(i){ iitPapersCollect(); iit.formPapers.splice(i, 1); iitPapersRender(); }
+
 // 기타 지원 내용·논문 정보 칸은 해당 항목을 골랐을 때만 보여준다
 function iitFormSync(){
   const etc = document.getElementById("iit-sup-etc"), etcText = document.getElementById("iit-sup-etcText");
@@ -259,13 +299,16 @@ async function iitSave(key){
     code: val("code"), site: val("site"), investigator: val("investigator"),
     support: { ip: on("ip"), fund: on("fund"), etc: on("etc"), etcText: on("etc") ? val("sup-etcText") : "" },
     status: radio("iit-status"),
-    pub: pubStatus === "완료" ? { status: pubStatus, journal: val("journal"), vol: val("vol"), title: val("title"), url: val("url") } : { status: pubStatus },
+    pub: { status: pubStatus },
   };
+  // 논문 정보는 '완료'일 때만 저장하고, 칸이 모두 빈 논문은 버린다
+  if(pubStatus === "완료"){ iitPapersCollect(); data.pub.papers = iit.formPapers.filter(p => IIT_PAPER_KEYS.some(k => p[k])); }
   // 배정 과제는 배정에서 지워졌을 때도 알아볼 수 있게 그때의 품목·과제명·담당자를 함께 저장해 둔다
   if(r && r.linked) Object.assign(data, { product: r.product, taskName: r.taskName, manager: r.manager });
   else Object.assign(data, { product: val("product"), taskName: val("taskName"), manager: val("manager") });
   if(!data.taskName){ showToast("과제명을 입력해 주세요", { error: true }); return; }
-  if(data.pub.url && !iitSafeUrl(data.pub.url)){ showToast("웹 링크는 http:// 또는 https:// 주소로 입력해 주세요", { error: true }); return; }
+  const badUrl = data.pub.papers ? iit.formPapers.findIndex(p => p.url && !iitSafeUrl(p.url)) : -1; // 화면의 논문 번호 그대로 알려준다
+  if(badUrl >= 0){ showToast("논문 " + (badUrl + 1) + "의 웹 링크는 http:// 또는 https:// 주소로 입력해 주세요", { error: true }); return; }
   const rec = { data, updated_at: new Date().toISOString(), updated_by: currentProfile.id };
   const btn = document.getElementById("iit-save");
   if(btn) btn.disabled = true;
@@ -321,13 +364,14 @@ async function iitUnhide(key){
 /* 엑셀: 탭의 '엑셀 다운로드'와 상단 '엑셀 내보내기'(IIT 관리) 모두 같은 시트 */
 function iitExportRows(list){
   return list.map(r => {
-    const s = r.support || {}, p = r.pub || {};
+    const s = r.support || {}, papers = iitPubStatus(r) === "완료" ? iitPapers(r.pub) : [];
+    const col = (k) => papers.map(p => p[k] || "").join("\n"); // 논문이 여러 편이면 셀 안에서 줄을 바꿔 순서대로
     return {
       "품목명": r.product || "", "과제코드": r.code || "", "과제명": r.taskName || "", "기관명": r.site || "", "연구자명": r.investigator || "",
       "담당자": r.manager || "", "과제 유형": r.type || "", "기간": r.period || "",
       "지원범위-IP": s.ip ? "O" : "", "지원범위-연구비": s.fund ? "O" : "", "지원범위-기타": s.etc ? (s.etcText || "O") : "",
       "진행 현황": r.status || r.assignStatus || "", "Publication": iitPubStatus(r),
-      "투고 저널명": p.journal || "", "Vol.": p.vol || "", "논문 제목": p.title || "", "웹 링크": p.url || "",
+      "논문 수": papers.length || "", "투고 저널명": col("journal"), "Vol.": col("vol"), "논문 제목": col("title"), "웹 링크": col("url"),
       "구분": r.linked ? "과제 배정" : r.orphan ? "배정에서 삭제됨" : "직접 추가",
     };
   });
