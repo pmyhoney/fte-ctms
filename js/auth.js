@@ -2,7 +2,7 @@
    화면에서는 ID로 가입·로그인하고, Supabase에는 "ID@fte-ctms.local" 형식의 이메일로 저장한다.
    가입하면 profiles에 '승인 대기'로 만들어지고, 관리자가 '팀원 관리' 탭에서 승인해야 데이터가 보인다. */
 const LOGIN_EMAIL_DOMAIN = "fte-ctms.local";
-let currentProfile = null; // { id, login_id, name, role, approved, member_id }
+let currentProfile = null; // { id, login_id, name, role, approved, member_id, kol_editor }
 
 function idToEmail(id){ return String(id).trim().toLowerCase() + "@" + LOGIN_EMAIL_DOMAIN; }
 
@@ -80,7 +80,7 @@ async function afterLogin(){
   document.getElementById("app").innerHTML = '<div class="loading-wrap"><div class="spinner"></div></div>';
   const { data: { user } } = await sb.auth.getUser();
   if(!user){ renderAuthScreen("login"); return; }
-  const { data, error } = await sb.from("profiles").select("id,login_id,name,role,approved,member_id").eq("id", user.id).maybeSingle();
+  const { data, error } = await sb.from("profiles").select("id,login_id,name,role,approved,member_id,kol_editor").eq("id", user.id).maybeSingle();
   if(error || !data){
     await sb.auth.signOut();
     renderAuthScreen("login", "회원 정보를 불러오지 못했어요. 다시 로그인해 주세요.");

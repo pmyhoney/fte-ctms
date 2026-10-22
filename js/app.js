@@ -1826,7 +1826,7 @@ function renderMembersTab(){
 /* ---------------- 회원 승인 (관리자 전용, Supabase profiles) ---------------- */
 let profilesCache = null; // null = 아직 안 불러옴
 async function loadProfiles(){
-  const { data, error } = await sb.from("profiles").select("id,login_id,name,role,approved,member_id,created_at").order("created_at");
+  const { data, error } = await sb.from("profiles").select("id,login_id,name,role,approved,member_id,kol_editor,created_at").order("created_at");
   profilesCache = error ? [] : data;
   if(error) showToast("회원 목록을 불러오지 못했어요", { error: true });
   if(state.tab === "members") renderTabContent();
@@ -1859,6 +1859,8 @@ function profilesSectionHtml(){
         '<span style="font-size:12px;color:#94A3B8;">'+esc(p.login_id)+'</span></div>' +
       '<div style="display:flex;align-items:center;gap:8px;">' +
         roleSel +
+        // KOL 탭 편집 담당자 지정 (관리자는 항상 편집 가능)
+        (p.approved && p.role !== "admin" ? '<label title="KOL 탭 명단·하위 탭을 추가·수정·삭제할 수 있어요" style="display:flex;align-items:center;gap:4px;font-size:12px;font-weight:700;white-space:nowrap;color:'+(p.kol_editor?'var(--accent)':'#94A3B8')+';cursor:pointer;"><input type="checkbox"'+(p.kol_editor?' checked':'')+' onchange="updateProfile(\''+p.id+'\', { kol_editor: this.checked })"/> KOL 편집</label>' : '') +
         (isViewer ? '' :
         '<select class="input" style="width:150px;padding:6px 8px;font-size:12.5px;" onchange="setProfileMember(\''+p.id+'\', this.value || null)">' +
           '<option value="">팀원 연결 안 함</option>' +
