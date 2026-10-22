@@ -466,7 +466,7 @@ function renderTrainingTab(){
       stat("전체 교육 이력", rows.length + "건") +
       stat("사내 / 사외", (rows.length - out.length) + " / " + out.length) +
       stat("전달교육 미계획 (사외)", out.filter(r => trTx(r) === "todo").length + "건", true) +
-      stat("전달교육 계획 · 완료", out.filter(r => trTx(r) === "plan").length + " · " + out.filter(r => trTx(r) === "done").length) +
+      stat("전달교육 계획 / 완료", out.filter(r => trTx(r) === "plan").length + " / " + out.filter(r => trTx(r) === "done").length) +
       '<div class="tr-stat click' + (training.view === "tx" ? ' on' : '') + '" onclick="trainingView(\'' + (training.view === "tx" ? 'list' : 'tx') + '\')">' +
         '<div class="k">팀내 전달교육 현황 ›</div><div class="v">' + training.sessions.length + '건</div></div>' +
     '</div>' +
