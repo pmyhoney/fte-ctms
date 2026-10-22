@@ -377,16 +377,17 @@ function weeklyEditOpen(id){
   if(!r) return;
   showModal(
     '<div style="font-weight:800;font-size:14px;margin-bottom:12px;">방문 기록 수정</div>' +
-    '<div style="max-height:60vh;overflow-y:auto;">' +
-      WEEKLY_COLS.map(c =>
-        '<div class="field"><div class="field-label">' + c.label + '</div>' +
+    // 넓은 화면에서는 2칸씩, 방문사유는 한 줄 전체 (모바일은 CSS가 한 칸씩 쌓음)
+    '<div class="modal-scroll wk-form" style="grid-template-columns:repeat(2,minmax(0,1fr));">' +
+      WEEKLY_COLS.filter(c => c.key !== "reason").concat(WEEKLY_COLS.filter(c => c.key === "reason")).map(c =>
+        '<div class="field"' + (c.key === "reason" ? ' style="grid-column:1 / -1;"' : '') + '><div class="field-label">' + c.label + '</div>' +
         '<input id="wke-' + c.key + '" class="input" type="' + (c.key === "visit_date" ? "date" : "text") + '" value="' + esc(r[c.key]) + '"/></div>'
       ).join("") +
     '</div>' +
     '<div style="display:flex;gap:8px;margin-top:6px;">' +
       '<button class="add-btn" style="flex:1;justify-content:center;background:#fff;color:#475569;border:1px solid var(--border);" onclick="closeModal()">취소</button>' +
       '<button class="add-btn" id="wke-save" style="flex:1;justify-content:center;" onclick="weeklyEditSave(\'' + id + '\')">저장</button>' +
-    '</div>'
+    '</div>', "md"
   );
 }
 async function weeklyEditSave(id){
