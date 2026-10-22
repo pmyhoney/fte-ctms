@@ -145,3 +145,5 @@ body.save-blocked #tabcontent input:not(.view-ok){pointer-events:none;background
 .kol-eval-tip b{display:block;font-size:11px;color:#9FD3D8;margin-bottom:3px;}
 .kol-eval:hover .kol-eval-tip,.kol-eval.show .kol-eval-tip{display:block;}
 @media (max-width:640px){ .kol-stats{grid-template-columns:repeat(2,minmax(0,1fr));} }
+.iit-row{cursor:pointer;}
+.iit-row:hover td{background:#F8FAFC;}
