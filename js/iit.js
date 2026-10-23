@@ -162,16 +162,19 @@ function iitSafeUrl(u){
   if(!/^[a-z][a-z0-9+.-]*:/i.test(u)) u = "https://" + u;
   return /^https?:\/\//i.test(u) ? u : "";
 }
-function iitPubHtml(r){
+// clip: 목록에서는 저널·제목을 한 줄로 자르고(마우스를 올리면 전체), 상세 팝업에서는 전부 보여준다
+function iitPubHtml(r, clip){
   const st = iitPubStatus(r), papers = st === "완료" ? iitPapers(r.pub) : [];
   let html = '<span style="font-weight:700;color:' + IIT_PUB_COLOR[st] + ';">' + st + '</span>' + (papers.length > 1 ? ' <span style="font-size:11px;color:#94A3B8;">' + papers.length + '편</span>' : '');
   papers.forEach((p, i) => {
     const url = iitSafeUrl(p.url);
+    const line = (v, tip) => '<div class="iit-clip" title="' + esc(tip) + '">' + v + '</div>';
+    const meta = [p.journal ? '<i>' + esc(p.journal) + '</i>' : '', p.vol ? 'Vol. ' + esc(p.vol) : ''].filter(Boolean).join(", ");
     const title = p.title ? (url ? '<a href="' + esc(url) + '" target="_blank" rel="noopener noreferrer" class="view-ok" onclick="event.stopPropagation()" style="color:var(--accent);text-decoration:underline;">' + esc(p.title) + '</a>' : esc(p.title)) : '';
     html += '<div style="font-size:11.5px;color:#475569;margin-top:4px;line-height:1.45;' + (i > 0 ? 'padding-top:4px;border-top:1px dashed var(--border);' : '') + '">' +
       (papers.length > 1 ? '<b style="color:#94A3B8;">' + (i + 1) + '.</b> ' : '') +
-      [p.journal ? '<i>' + esc(p.journal) + '</i>' : '', p.vol ? 'Vol. ' + esc(p.vol) : ''].filter(Boolean).join(", ") +
-      (title ? '<div>' + title + '</div>' : '') + '</div>';
+      (clip ? (meta ? line(meta, [p.journal, p.vol ? "Vol. " + p.vol : ""].filter(Boolean).join(", ")) : '') + (title ? line(title, p.title) : '')
+        : meta + (title ? '<div>' + title + '</div>' : '')) + '</div>';
   });
   return html;
 }
@@ -183,7 +186,7 @@ function iitListHtml(list, total){
   const td = (v, style) => '<td style="white-space:normal;text-align:left;' + (style || '') + '">' + v + '</td>';
   const dash = (v) => v ? esc(v) : '<span style="color:#94A3B8;">–</span>';
   return '<div style="overflow-x:auto;"><table>' +
-    '<thead><tr><th>품목명</th><th>과제코드</th><th>과제명</th><th>기관명</th><th>연구자명</th><th>담당자</th><th>지원범위</th><th>진행 현황</th><th>Publication</th>' + (edit ? '<th></th>' : '') + '</tr></thead><tbody>' +
+    '<thead><tr><th>품목명</th><th>과제코드</th><th>과제명</th><th>기관명</th><th>연구자명</th><th>담당자</th><th>지원범위</th><th>진행 현황</th><th>Publication</th>' + (edit ? '<th class="iit-act"></th>' : '') + '</tr></thead><tbody>' +
     list.map(r => '<tr class="iit-row" title="눌러서 상세 정보 보기" onclick="iitDetailOpen(\'' + r.key + '\')">' +
       td(iitProductHtml(r), "white-space:nowrap;") +
       td(dash(r.code), "white-space:nowrap;") +
@@ -195,8 +198,8 @@ function iitListHtml(list, total){
       td(dash(r.manager), "white-space:nowrap;") +
       td(iitSupportHtml(r.support), "min-width:90px;font-size:12px;") +
       '<td>' + iitStatusHtml(r) + '</td>' +
-      td(iitPubHtml(r), "min-width:140px;") +
-      (edit ? '<td style="white-space:nowrap;" onclick="event.stopPropagation()">' +
+      td(iitPubHtml(r, true), "min-width:140px;") +
+      (edit ? '<td class="iit-act" onclick="event.stopPropagation()">' +
         (r.hidden ? '<button class="add-btn view-ok" style="padding:5px 9px;font-size:12px;" onclick="iitUnhide(\'' + r.key + '\')">다시 표시</button>' :
           '<button class="icon-btn view-ok" title="수정" style="color:#64748B;" onclick="iitEditOpen(\'' + r.key + '\')">' + icon('edit', 14) + '</button>' +
           '<button class="icon-btn view-ok" title="' + (r.linked ? '목록에서 빼기' : '삭제') + '" onclick="iitDeleteConfirm(\'' + r.key + '\')">' + icon('trash', 14) + '</button>') +
