@@ -119,6 +119,7 @@ async function logout(reason){
   worklogReset(); // worklog.js
   kolReset(); // kol.js
   iitReset(); // iit.js
+  histReset(); // history.js
   Object.assign(state, {
     role: null, loaded: false, dirty: false, saveError: false, saveBlocked: false,
     taskTypes: [], members: [], products: [], assignments: [], activityLog: [],

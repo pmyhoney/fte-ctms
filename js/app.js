@@ -862,6 +862,7 @@ function renderTabBar(){
     { id: "members", label: "팀원 관리", icon: "users", adminOnly: true },
     { id: "types", label: "과제 유형", icon: "list", adminOnly: true },
     { id: "products", label: "품목 관리", icon: "box", adminOnly: true },
+    { id: "history", label: "변경 이력", icon: "refresh", adminOnly: true }, // history.js
   ].filter(it => (!it.adminOnly || isSysAdmin()) && (!it.writerOnly || canWrite()));
   document.getElementById("tabbar").innerHTML =
     '<div class="tabbar">' +
@@ -873,7 +874,7 @@ function renderTabBar(){
     '</div>';
 }
 
-const ADMIN_ONLY_TABS = ["members", "types", "products"];
+const ADMIN_ONLY_TABS = ["members", "types", "products", "history"];
 // 'FTE 관리' 탭 아래의 하위 탭 — state.tab에는 하위 탭 id가 그대로 들어간다
 const FTE_SUB_TABS = [
   { id: "dashboard", label: "배정 현황" },
@@ -931,6 +932,7 @@ function renderTabContent(){
   else if(state.tab === "training") el.innerHTML = renderTrainingTab(); // worklog.js
   else if(state.tab === "kol") el.innerHTML = renderKolTab(); // kol.js
   else if(state.tab === "iit") el.innerHTML = renderIitTab(); // iit.js
+  else if(state.tab === "history") el.innerHTML = renderHistoryTab(); // history.js
   if(FTE_SUB_TABS.some(s => s.id === state.tab)) el.insertAdjacentHTML("afterbegin", fteSubTabBar());
   if(state.tab === "assign") wireAssignTab();
 }
