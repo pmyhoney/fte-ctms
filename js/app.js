@@ -2840,6 +2840,34 @@ function ctmsNumInput(gid, field, val, ph){
   return '<input type="number" min="0" step="1" class="input" placeholder="'+ph+'" value="'+(val === null || val === undefined ? "" : val)+'" ' +
     'onchange="ctmsSetField(\''+gid+'\',\''+field+'\',this.value)" style="font-size:12px;padding:6px 8px;"/>';
 }
+// CRO: 기본 한 칸, 여러 곳 추가 가능. CRO 없이 진행하는 과제는 '해당 없음'
+const ctmsCrosOf = (rec) => Array.isArray(rec.cros) && rec.cros.length ? rec.cros : [""];
+const ctmsCroText = (rec) => rec.croNone ? "해당 없음" : ctmsCrosOf(rec).filter(Boolean).join(", ");
+function ctmsCroUpdate(gid, fn){
+  if(!ctmsCanEdit(gid)) return;
+  const rec = state.ctms[gid];
+  if(!rec) return;
+  fn(rec);
+  ctmsPersist(gid);
+  renderTabContent();
+}
+function ctmsCroSet(gid, i, val){ ctmsCroUpdate(gid, rec => { rec.cros = ctmsCrosOf(rec).slice(); rec.cros[i] = String(val || "").trim(); }); }
+function ctmsCroAdd(gid){ ctmsCroUpdate(gid, rec => { rec.cros = ctmsCrosOf(rec).concat([""]); }); }
+function ctmsCroRemove(gid, i){ ctmsCroUpdate(gid, rec => { rec.cros = ctmsCrosOf(rec).filter((_, j) => j !== i); }); }
+function ctmsCroNone(gid, on){ ctmsCroUpdate(gid, rec => { rec.croNone = !!on; }); }
+function ctmsCroHtml(gid, rec){
+  const label = '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:10.5px;color:#94A3B8;margin-bottom:3px;">CRO' +
+    '<label style="display:flex;align-items:center;gap:4px;cursor:pointer;color:#64748B;font-weight:600;"><input type="checkbox"'+(rec.croNone ? ' checked' : '')+' onchange="ctmsCroNone(\''+gid+'\',this.checked)" style="margin:0;"/> 해당 없음</label></div>';
+  if(rec.croNone) return '<div style="flex:1 1 240px;min-width:0;">' + label + '<div style="font-size:12px;color:#94A3B8;padding:7px 2px;">CRO 없이 진행하는 과제예요</div></div>';
+  const cros = ctmsCrosOf(rec);
+  return '<div style="flex:1 1 240px;min-width:0;">' + label +
+    cros.map((c, i) => '<div style="display:flex;gap:4px;align-items:center;margin-bottom:4px;">' +
+      '<input class="input" value="'+esc(c)+'" onchange="ctmsCroSet(\''+gid+'\','+i+',this.value)" placeholder="'+(cros.length > 1 ? 'CRO '+(i + 1) : '예: ○○ CRO')+'" style="font-size:12px;padding:6px 8px;flex:1;min-width:0;"/>' +
+      (cros.length > 1 ? '<button class="icon-btn" title="이 CRO 삭제" onclick="ctmsCroRemove(\''+gid+'\','+i+')">'+icon('trash',13)+'</button>' : '') +
+    '</div>').join("") +
+    '<button class="add-btn" style="display:inline-flex;padding:4px 9px;font-size:11.5px;background:#fff;color:var(--accent);border:1px dashed var(--accent);" onclick="ctmsCroAdd(\''+gid+'\')">'+icon('plus',12)+' CRO 추가</button>' +
+  '</div>';
+}
 function ctmsLabeled(label, inner, basis){
   return '<div style="flex:'+(basis || "1 1 90px")+';min-width:0;"><div style="font-size:10.5px;color:#94A3B8;margin-bottom:3px;">'+label+'</div>'+inner+'</div>';
 }
@@ -2928,6 +2956,7 @@ function ctmsCardHtml(g){
     detail = '<div style="margin-top:12px;padding-top:12px;border-top:1px dashed var(--border);">' +
       '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">' +
         ctmsLabeled("프로토콜·과제 번호", '<input class="input" value="'+esc(rec.protocolNo || "")+'" onchange="ctmsSetField(\''+g.gid+'\',\'protocolNo\',this.value)" placeholder="예: GC-XXXX-001" style="font-size:12px;padding:6px 8px;"/>', "1 1 200px") +
+        ctmsCroHtml(g.gid, rec) +
       '</div>' +
       '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">' +
         ctmsLabeled("기관 수 (계획)", ctmsNumInput(g.gid, "siteTarget", rec.siteTarget, "0")) +
@@ -3582,6 +3611,7 @@ function ctmsExportRows(){
       "담당자": names.join(", "),
       "과제상태": g.status,
       "프로토콜·과제 번호": rec.protocolNo || "",
+      "CRO": ctmsCroText(rec),
       "CTMS 진행상태": s.health,
       "마일스톤 완료": s.done + "/" + s.total,
       "기관 수(계획)": rec.siteTarget === null || rec.siteTarget === undefined ? "" : rec.siteTarget,
