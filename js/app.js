@@ -2696,6 +2696,20 @@ function ctmsSetField(gid, field, val){
   ctmsPersist(gid);
   renderTabContent();
 }
+// 마일스톤 계획 변경 이력: 최초 입력부터 모든 변경을 m.planHistory에 쌓는다
+// [{ plan, at: "YYYY-MM-DD", by, reason, initial }] — 마지막 항목의 plan이 지금 계획
+function ctmsPlanLog(m, plan, reason, initial){
+  if(!Array.isArray(m.planHistory)) m.planHistory = [];
+  // 이력 기능 이전에 입력된 계획은 '최초 계획'으로 먼저 남겨 둔다
+  if(m.planHistory.length === 0 && m.plan) m.planHistory.push({ plan: m.plan, at: "", by: "", reason: "기존 입력값", initial: true });
+  m.planHistory.push({ plan: plan || "", at: todayYmd(), by: currentProfile ? currentProfile.name : "", reason: reason || "", initial: !!initial && m.planHistory.length === 0 }); // worklog.js
+}
+const ctmsPlanHistoryOf = (m) => Array.isArray(m.planHistory) && m.planHistory.length ? m.planHistory : (m.plan ? [{ plan: m.plan, at: "", by: "", reason: "기존 입력값", initial: true }] : []);
+const ctmsPlanBaseline = (m) => { const h = ctmsPlanHistoryOf(m); return h.length ? h[0].plan : ""; };
+const ctmsPlanChangeCount = (m) => Math.max(0, ctmsPlanHistoryOf(m).length - 1);
+const ctmsMonthDiff = (a, b) => { if(!a || !b) return null; const [ay, am] = a.split("-").map(Number), [by, bm] = b.split("-").map(Number); return (by * 12 + bm) - (ay * 12 + am); };
+const ctmsDiffText = (n) => n === null ? "" : n === 0 ? "변동 없음" : (n > 0 ? "+" : "") + n + "개월";
+
 function ctmsSetMilestone(gid, key, kind, val){
   if(!ctmsCanEdit(gid)) return;
   const rec = state.ctms[gid];
@@ -2703,6 +2717,9 @@ function ctmsSetMilestone(gid, key, kind, val){
   if(!rec.milestones) rec.milestones = {};
   const m = rec.milestones[key] || (rec.milestones[key] = {});
   const prev = m[kind];
+  // 이미 있는 계획은 바로 바꾸지 않고, 사유를 받는 '계획 변경'으로 바꾼다
+  if(kind === "plan" && prev && val !== prev){ renderTabContent(); ctmsPlanChangeOpen(gid, key); return; }
+  if(kind === "plan" && val && !prev) ctmsPlanLog(m, val, ctmsPlanHistoryOf(m).length ? "계획 다시 입력" : "최초 입력", true);
   m[kind] = val || "";
   if(kind === "actual" && val && !prev){
     const g = ctmsAllGroups().find(x => x.gid === gid);
@@ -2716,7 +2733,9 @@ function ctmsSetMilestone(gid, key, kind, val){
     ctmsStagesOf(rec).forEach(st => {
       if(typeof st.auto !== "number") return;
       const mm = rec.milestones[st.key] || (rec.milestones[st.key] = {});
-      mm.plan = ctmsAddMonths(val, st.auto);
+      const next = ctmsAddMonths(val, st.auto);
+      if(mm.plan !== next) ctmsPlanLog(mm, next, "'품목 허가' 실적월(" + val + ") 기준 자동 계산", !mm.plan);
+      mm.plan = next;
     });
   }
   ctmsPersist(gid);
@@ -2883,6 +2902,77 @@ function ctmsCroHtml(gid, rec){
 function ctmsLabeled(label, inner, basis){
   return '<div style="flex:'+(basis || "1 1 90px")+';min-width:0;"><div style="font-size:10.5px;color:#94A3B8;margin-bottom:3px;">'+label+'</div>'+inner+'</div>';
 }
+function ctmsPlanChangeOpen(gid, key){
+  if(!ctmsCanEdit(gid)) return;
+  const rec = state.ctms[gid]; if(!rec) return;
+  const m = (rec.milestones || {})[key] || {}, st = ctmsStagesOf(rec).find(x => x.key === key);
+  showModal(
+    '<div style="font-weight:800;font-size:14px;margin-bottom:4px;">계획 일정 변경</div>' +
+    '<div style="font-size:12.5px;color:#94A3B8;margin-bottom:12px;">' + esc(ctmsGroupName(gid)) + ' · ' + esc(st ? st.label : key) + '</div>' +
+    '<div class="row">' +
+      '<div class="field"><div class="field-label">현재 계획</div><div class="input" style="background:#F8FAFC;color:#475569;">' + esc(m.plan || "–") + '</div></div>' +
+      '<div class="field"><div class="field-label">변경 계획 *</div><input class="input" id="cpc-plan" type="month" value="' + esc(m.plan || "") + '"/></div>' +
+    '</div>' +
+    '<div class="field"><div class="field-label">변경 사유 *</div><textarea class="input" id="cpc-reason" rows="3" style="resize:vertical;" placeholder="예: IRB 보완 요청으로 승인 지연, 기관 계약 일정 변경"></textarea></div>' +
+    (ctmsPlanHistoryOf(m).length ? '<div style="font-size:11.5px;font-weight:700;color:#64748B;margin:4px 0 6px;">지금까지의 계획 이력</div>' + ctmsPlanHistoryTableHtml(m) : '') +
+    '<div style="display:flex;gap:8px;margin-top:14px;">' +
+      '<button class="add-btn" style="flex:1;justify-content:center;background:#fff;color:#475569;border:1px solid var(--border);" onclick="closeModal()">취소</button>' +
+      '<button class="add-btn" style="flex:1;justify-content:center;" onclick="ctmsPlanChangeSave(\'' + gid + '\',\'' + key + '\')">변경 저장</button>' +
+    '</div>', "md"
+  );
+}
+function ctmsPlanChangeSave(gid, key){
+  if(!ctmsCanEdit(gid)) return;
+  const rec = state.ctms[gid]; if(!rec) return;
+  const m = rec.milestones[key]; if(!m) return;
+  const plan = document.getElementById("cpc-plan").value, reason = document.getElementById("cpc-reason").value.trim();
+  if(!/^\d{4}-\d{2}$/.test(plan)){ showToast("변경할 계획월을 입력해 주세요", { error: true }); return; }
+  if(plan === m.plan){ showToast("지금 계획과 같은 달이에요", { error: true }); return; }
+  if(!reason){ showToast("변경 사유를 입력해 주세요", { error: true }); return; }
+  const from = m.plan;
+  ctmsPlanLog(m, plan, reason, false);
+  m.plan = plan;
+  const st = ctmsStagesOf(rec).find(x => x.key === key);
+  logActivity('CTMS 계획 변경: "' + ctmsGroupName(gid) + '" - ' + (st ? st.label : key) + ' ' + from + ' → ' + plan + ' (' + reason + ')');
+  ctmsPersist(gid); closeModal(); renderTabContent();
+}
+function ctmsPlanHistoryTableHtml(m){
+  const h = ctmsPlanHistoryOf(m), td = (v, st) => '<td style="text-align:left;white-space:normal;vertical-align:top;font-size:12px;' + (st || '') + '">' + v + '</td>';
+  return '<div style="overflow-x:auto;"><table style="min-width:0;"><thead><tr><th style="text-align:left;">구분</th><th style="text-align:left;">계획월</th><th style="text-align:left;">변동</th><th style="text-align:left;">사유</th><th style="text-align:left;">기록</th></tr></thead><tbody>' +
+    h.map((e, i) => '<tr>' +
+      td(i === 0 ? '<b style="color:var(--accent);">최초</b>' : '변경 ' + i, "white-space:nowrap;") +
+      td('<b>' + esc(e.plan || "–") + '</b>', "white-space:nowrap;") +
+      td(i === 0 ? '' : esc(ctmsDiffText(ctmsMonthDiff(h[i - 1].plan, e.plan))), "white-space:nowrap;color:" + (i && ctmsMonthDiff(h[i - 1].plan, e.plan) > 0 ? "#B91C1C" : "#1E7A4F") + ";") +
+      td(esc(e.reason || "")) +
+      td(esc([e.at, e.by].filter(Boolean).join(" · ") || "–"), "white-space:nowrap;color:#94A3B8;") +
+    '</tr>').join("") + '</tbody></table></div>';
+}
+function ctmsPlanHistoryOpen(gid, key){
+  const rec = state.ctms[gid]; if(!rec) return;
+  const m = (rec.milestones || {})[key] || {}, st = ctmsStagesOf(rec).find(x => x.key === key);
+  const total = ctmsMonthDiff(ctmsPlanBaseline(m), m.plan);
+  showModal(
+    '<div style="font-weight:800;font-size:14px;margin-bottom:4px;">계획 변경 이력</div>' +
+    '<div style="font-size:12.5px;color:#94A3B8;margin-bottom:12px;">' + esc(ctmsGroupName(gid)) + ' · ' + esc(st ? st.label : key) +
+      ' · 최초 ' + esc(ctmsPlanBaseline(m) || "–") + ' → 현재 ' + esc(m.plan || "–") + (total ? ' (' + ctmsDiffText(total) + ')' : '') + '</div>' +
+    '<div class="modal-scroll">' + ctmsPlanHistoryTableHtml(m) + '</div>' +
+    '<div style="display:flex;gap:8px;margin-top:14px;">' +
+      '<button class="add-btn view-ok" style="flex:1;justify-content:center;background:#fff;color:#475569;border:1px solid var(--border);" onclick="closeModal()">닫기</button>' +
+      (ctmsCanEdit(gid) && m.plan ? '<button class="add-btn" style="flex:1;justify-content:center;" onclick="ctmsPlanChangeOpen(\'' + gid + '\',\'' + key + '\')">계획 변경</button>' : '') +
+    '</div>', "md"
+  );
+}
+function ctmsPlanCellHtml(gid, st, m){
+  if(!m.plan){
+    return '<input type="month" class="input" value="" onchange="ctmsSetMilestone(\''+gid+'\',\''+st.key+'\',\'plan\',this.value)" '+(typeof st.auto === "number" ? 'title="\'품목 허가\' 실적월 기준 자동 계산됨"' : '')+' style="font-size:12px;padding:5px 6px;"/>';
+  }
+  const n = ctmsPlanChangeCount(m), diff = ctmsMonthDiff(ctmsPlanBaseline(m), m.plan);
+  return '<div style="display:flex;gap:4px;align-items:center;">' +
+      '<div class="input" style="flex:1;min-width:0;font-size:12px;padding:5px 6px;background:#F8FAFC;">' + esc(m.plan) + '</div>' +
+      (ctmsCanEdit(gid) ? '<button class="add-btn" title="계획 일정 변경 (사유 기록)" style="flex:0 0 auto;padding:5px 8px;font-size:11.5px;background:#fff;color:var(--accent);border:1px solid var(--accent);" onclick="ctmsPlanChangeOpen(\''+gid+'\',\''+st.key+'\')">변경</button>' : '') +
+    '</div>' +
+    (n > 0 ? '<button class="view-ok" onclick="ctmsPlanHistoryOpen(\''+gid+'\',\''+st.key+'\')" style="border:none;background:none;padding:2px 0 0;font-size:10.5px;color:#B45309;cursor:pointer;text-align:left;">최초 '+esc(ctmsPlanBaseline(m))+(diff ? ' ('+ctmsDiffText(diff)+')' : '')+' · 변경 '+n+'회 ›</button>' : '');
+}
 function ctmsMilestoneRowsHtml(g){
   const gid = g.gid, rec = g.rec, now = currentPeriod();
   const stages = ctmsStagesOf(rec);
@@ -2893,9 +2983,9 @@ function ctmsMilestoneRowsHtml(g){
     else if(m.plan && m.plan < now) badge = '<span style="font-size:10.5px;font-weight:800;color:#B91C1C;">지연</span>';
     else if(m.plan) badge = '<span style="font-size:10.5px;font-weight:700;color:#94A3B8;">예정</span>';
     else badge = '<span style="font-size:10.5px;color:#CBD5E1;">–</span>';
-    return '<div style="display:flex;align-items:flex-end;gap:6px;flex-wrap:wrap;padding:6px 8px;background:#fff;border-radius:7px;margin-bottom:5px;">' +
+    return '<div style="display:flex;align-items:flex-start;gap:6px;flex-wrap:wrap;padding:6px 8px;background:#fff;border-radius:7px;margin-bottom:5px;">' +
       '<input class="input" value="'+esc(st.label)+'" onchange="ctmsRenameStage(\''+gid+'\',\''+st.key+'\',this.value)" title="이름 수정" style="flex:1 1 130px;min-width:0;align-self:center;font-size:13px;font-weight:600;padding:5px 6px;border-color:transparent;background:transparent;" onfocus="this.style.borderColor=\'var(--border)\';this.style.background=\'#fff\';" onblur="this.style.borderColor=\'transparent\';this.style.background=\'transparent\';"/>' +
-      ctmsLabeled("계획", '<input type="month" class="input" value="'+(m.plan || "")+'" onchange="ctmsSetMilestone(\''+gid+'\',\''+st.key+'\',\'plan\',this.value)" '+(typeof st.auto === "number" ? 'title="\'품목 허가\' 실적월 기준 자동 계산됨(직접 수정 가능)"' : '')+' style="font-size:12px;padding:5px 6px;"/>', "1 1 110px") +
+      ctmsLabeled("계획", ctmsPlanCellHtml(gid, st, m), "1 1 150px") +
       ctmsLabeled("실적", '<input type="month" class="input" value="'+(m.actual || "")+'" onchange="ctmsSetMilestone(\''+gid+'\',\''+st.key+'\',\'actual\',this.value)" style="font-size:12px;padding:5px 6px;"/>', "1 1 110px") +
       '<div style="flex:0 0 34px;text-align:right;align-self:center;">'+badge+'</div>' +
       '<button class="icon-btn" title="마일스톤 삭제" onclick="ctmsDeleteStage(\''+gid+'\',\''+st.key+'\')" style="align-self:center;">'+icon('trash',14)+'</button>' +
@@ -3592,8 +3682,13 @@ function ctmsCostSave(){
 function ctmsExtExportSheets(wb){
   const groups = ctmsGroups();
   const nameOf = (g) => g.primary.taskName;
-  const issueRows = [], costRows = [];
+  const issueRows = [], costRows = [], planRows = [];
   groups.forEach(g => {
+    if(state.ctms[g.gid]) ctmsStagesOf(state.ctms[g.gid]).forEach(st => {
+      const m = (state.ctms[g.gid].milestones || {})[st.key] || {}, h = ctmsPlanHistoryOf(m);
+      if(h.length > 1) h.forEach((e, i) => planRows.push({ "과제명": nameOf(g), "마일스톤": st.label, "구분": i === 0 ? "최초" : "변경 " + i,
+        "계획월": e.plan, "이전 계획": i ? h[i - 1].plan : "", "변동": i ? ctmsDiffText(ctmsMonthDiff(h[i - 1].plan, e.plan)) : "", "사유": e.reason || "", "기록일": e.at || "", "기록자": e.by || "" }));
+    });
     (state.ctmsIssues[g.gid] || []).forEach(e => {
       const isP = ctmsEntryType(e) === "progress";
       issueRows.push({ "과제명": nameOf(g), "구분": isP ? "진행상황" : "이슈", "일자": e.date || "", "심각도": isP ? "" : ctmsLabelOf(CTMS_SEVERITY, e.severity),
@@ -3606,6 +3701,7 @@ function ctmsExtExportSheets(wb){
   });
   if(issueRows.length > 0) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(issueRows), "CTMS 진행·이슈");
   if(costRows.length > 0) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(costRows), "CTMS 비용");
+  if(planRows.length > 0) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(planRows), "CTMS 계획 변경 이력");
 }
 
 function ctmsExportRows(){
@@ -3636,6 +3732,8 @@ function ctmsExportRows(){
     ctmsStagesOf(rec).forEach(st => {
       const m = (rec.milestones || {})[st.key] || {};
       row[st.label+" 계획"] = m.plan || "";
+      row[st.label+" 최초 계획"] = ctmsPlanBaseline(m);
+      row[st.label+" 계획 변경"] = ctmsPlanChangeCount(m) || "";
       row[st.label+" 실적"] = m.actual || "";
     });
     row["비고"] = rec.note || "";
