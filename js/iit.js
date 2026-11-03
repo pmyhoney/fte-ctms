@@ -443,7 +443,7 @@ function iitCtmsCanEdit(r){
 }
 // 화면에 보여줄 값: CTMS 연동 값과 IIT 탭 값을 합친다
 function iitDetailView(r){
-  const d = r.detail || {}, rec = r.linked ? state.ctms[r.gid] || null : null;
+  const d = r.detail || {}, rec = r.linked ? ctmsRecOf(r.gid) : null; // app.js — 추적 해제된 기록은 쓰지 않는다
   const ms = (k) => rec && rec.milestones && rec.milestones[k] ? rec.milestones[k].actual || "" : "";
   // CTMS 실적월이 IIT 날짜와 다르면(CTMS 탭에서 바꾼 경우) 날짜는 비우고 CTMS 실적월을 보여준다
   const date = (k, dk) => {
@@ -650,6 +650,8 @@ function iitCtmsApply(r, old, dates, subj){
   const changes = ["rrc", "contract"].filter(k => dates[k] !== old[k].date);
   const subjChanged = ["subjTarget", "subjEnrolled", "subjCompleted"].filter(k => subj[k] !== old[k]);
   if(changes.length === 0 && subjChanged.length === 0) return;
+  // 추적을 해제한 과제는 보관된 기록을 덮어쓰지 않도록 CTMS에 반영하지 않는다 (CTMS 탭에서 '다시 추적'으로 선택)
+  if(ctmsStoppedRecOf(gid)){ showToast("CTMS 추적이 해제된 과제라 CTMS 탭에는 반영하지 않았어요", { error: true }); return; }
   let rec = state.ctms[gid];
   if(!rec){
     rec = state.ctms[gid] = { protocolNo: "", siteTarget: null, siteActive: null, subjTarget: null, subjEnrolled: null, subjCompleted: null, milestones: {}, note: "", stages: ctmsDefaultStagesFor(gid) };

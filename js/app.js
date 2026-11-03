@@ -2605,6 +2605,9 @@ async function ctmsOwnerSaveNow(){
 
 function ctmsGid(a){ return a.groupId || a.id; }
 function ctmsGroups(){ return ctmsAllGroups().filter(g => !state.ctmsExcluded[g.gid]); }
+// 추적을 해제한 기록은 지우지 않고 stoppedAt만 붙여 보관한다 → 다시 추적할 때 이어서 쓸 수 있다
+const ctmsRecOf = (gid) => { const r = state.ctms[gid]; return r && !r.stoppedAt ? r : null; };
+const ctmsStoppedRecOf = (gid) => { const r = state.ctms[gid]; return r && r.stoppedAt ? r : null; };
 function ctmsAllGroups(){
   const seen = {};
   const out = [];
@@ -2616,7 +2619,7 @@ function ctmsAllGroups(){
     const now = currentPeriod();
     const live = members.filter(m => m.status !== "종료" && m.status !== "중단");
     const primary = live.find(m => isActive(m, now)) || live[0] || members[0];
-    out.push({ gid, members, primary, status: primary.status || "준비중", rec: state.ctms[gid] || null });
+    out.push({ gid, members, primary, status: primary.status || "준비중", rec: ctmsRecOf(gid) });
   });
   return out;
 }
@@ -2668,12 +2671,58 @@ function ctmsHealthBadge(h){
 function ctmsStart(gid){
   if(!ctmsCanEdit(gid)) return;
   const g = ctmsAllGroups().find(x => x.gid === gid);
-  if(!g || state.ctms[gid]) return;
-  state.ctms[gid] = { protocolNo: "", siteTarget: null, siteActive: null, subjTarget: null, subjEnrolled: null, subjCompleted: null, milestones: {}, note: "", stages: ctmsDefaultStagesFor(gid) };
+  if(!g || ctmsRecOf(gid)) return;
+  if(ctmsStoppedRecOf(gid)){ ctmsRestartOpen(gid); return; }
+  state.ctms[gid] = ctmsNewRec(gid);
   state.ctmsUi.open[gid] = true;
   logActivity('CTMS 추적 시작: "'+g.primary.taskName+'"');
   ctmsPersist(gid);
   renderTabContent();
+}
+const ctmsNewRec = (gid) => ({ protocolNo: "", siteTarget: null, siteActive: null, subjTarget: null, subjEnrolled: null, subjCompleted: null, milestones: {}, note: "", stages: ctmsDefaultStagesFor(gid) });
+// 해제했던 기록의 요약 (다시 추적할 때 보여 준다)
+function ctmsStoppedSummaryHtml(r){
+  const ms = Object.values(r.milestones || {}).filter(m => m && (m.plan || m.actual)).length;
+  const items = [
+    r.protocolNo ? "프로토콜 " + esc(r.protocolNo) : "",
+    ms ? "마일스톤 " + ms + "개 입력" : "",
+    r.subjTarget || r.subjEnrolled ? "피험자 " + (r.subjEnrolled || 0) + "/" + (r.subjTarget || 0) : "",
+    r.siteTarget || r.siteActive ? "기관 " + (r.siteActive || 0) + "/" + (r.siteTarget || 0) : "",
+    r.note ? "비고 있음" : "",
+  ].filter(Boolean);
+  return items.length ? items.join(" · ") : "입력된 값이 거의 없어요";
+}
+function ctmsRestartOpen(gid){
+  const r = ctmsStoppedRecOf(gid); if(!r) return;
+  showModal(
+    '<div style="font-weight:800;font-size:14px;margin-bottom:4px;">CTMS 다시 추적</div>' +
+    '<div style="font-size:12.5px;color:#94A3B8;margin-bottom:12px;">' + esc(ctmsGroupName(gid)) + '</div>' +
+    '<div style="padding:10px 12px;background:#F8FAFC;border:1px solid var(--border);border-radius:8px;font-size:12.5px;color:#475569;line-height:1.6;margin-bottom:12px;">' +
+      '<b>이전에 추적했던 기록이 있어요</b><br/>' + ctmsStoppedSummaryHtml(r) +
+      '<div style="font-size:11.5px;color:#94A3B8;margin-top:2px;">추적 해제: ' + esc([String(r.stoppedAt).slice(0, 10), r.stoppedBy].filter(Boolean).join(" · ")) + '</div>' +
+    '</div>' +
+    '<div style="font-size:12.5px;color:#475569;line-height:1.6;margin-bottom:14px;">기존 데이터를 이어서 쓸까요, 빈 상태로 새로 시작할까요?<br/><span style="color:#94A3B8;">새로 시작해도 기존 데이터는 지우지 않고 보관해요. 진행·이슈와 비용 기록은 어느 쪽이든 그대로 남아요.</span></div>' +
+    '<div style="display:flex;flex-direction:column;gap:8px;">' +
+      '<button class="add-btn" style="justify-content:center;" onclick="ctmsRestart(\''+gid+'\', true)">기존 데이터 이어서 사용</button>' +
+      '<button class="add-btn" style="justify-content:center;background:#fff;color:var(--accent);border:1px solid var(--accent);" onclick="ctmsRestart(\''+gid+'\', false)">새로 시작</button>' +
+      '<button class="add-btn" style="justify-content:center;background:#fff;color:#475569;border:1px solid var(--border);" onclick="closeModal()">취소</button>' +
+    '</div>', "md"
+  );
+}
+function ctmsRestart(gid, reuse){
+  if(!ctmsCanEdit(gid)) return;
+  const old = ctmsStoppedRecOf(gid); if(!old) return;
+  if(reuse){
+    delete old.stoppedAt; delete old.stoppedBy;
+  }else{
+    // 새 기록에 이전 기록을 통째로 보관해 둔다 (archive: 오래된 순)
+    const prev = Object.assign({}, old), archive = prev.archive || [];
+    delete prev.archive;
+    state.ctms[gid] = Object.assign(ctmsNewRec(gid), { archive: archive.concat([prev]) });
+  }
+  state.ctmsUi.open[gid] = true;
+  logActivity('CTMS 다시 추적: "' + ctmsGroupName(gid) + '" (' + (reuse ? '기존 데이터 이어서 사용' : '새로 시작, 기존 데이터 보관') + ')');
+  ctmsPersist(gid); closeModal(); renderTabContent();
 }
 function ctmsToggle(gid){
   state.ctmsUi.open[gid] = !state.ctmsUi.open[gid];
@@ -2685,7 +2734,7 @@ function ctmsSetFilter(key, val){
 }
 function ctmsSetField(gid, field, val){
   if(!ctmsCanEdit(gid)) return;
-  const rec = state.ctms[gid];
+  const rec = ctmsRecOf(gid);
   if(!rec) return;
   if(CTMS_NUM_FIELDS.indexOf(field) >= 0){
     const n = val === "" ? null : Math.floor(Number(val));
@@ -2712,7 +2761,7 @@ const ctmsDiffText = (n) => n === null ? "" : n === 0 ? "변동 없음" : (n > 0
 
 function ctmsSetMilestone(gid, key, kind, val){
   if(!ctmsCanEdit(gid)) return;
-  const rec = state.ctms[gid];
+  const rec = ctmsRecOf(gid);
   if(!rec) return;
   if(!rec.milestones) rec.milestones = {};
   const m = rec.milestones[key] || (rec.milestones[key] = {});
@@ -2743,7 +2792,7 @@ function ctmsSetMilestone(gid, key, kind, val){
 }
 function ctmsAddStage(gid){
   if(!ctmsCanEdit(gid)) return;
-  const rec = state.ctms[gid];
+  const rec = ctmsRecOf(gid);
   const input = document.getElementById("ctms-newms-" + gid);
   if(!rec || !input) return;
   const label = input.value.trim();
@@ -2755,7 +2804,7 @@ function ctmsAddStage(gid){
 }
 function ctmsRenameStage(gid, key, val){
   if(!ctmsCanEdit(gid)) return;
-  const rec = state.ctms[gid];
+  const rec = ctmsRecOf(gid);
   if(!rec) return;
   const label = String(val || "").trim();
   const cur = ctmsStagesOf(rec).find(x => x.key === key);
@@ -2768,7 +2817,7 @@ function ctmsRenameStage(gid, key, val){
 }
 function ctmsDeleteStage(gid, key){
   if(!ctmsCanEdit(gid)) return;
-  const rec = state.ctms[gid];
+  const rec = ctmsRecOf(gid);
   if(!rec) return;
   const stages = ctmsEnsureStages(rec);
   const idx = stages.findIndex(x => x.key === key);
@@ -2781,7 +2830,7 @@ function ctmsDeleteStage(gid, key){
   state.lastAction = {
     gid,
     restore: () => {
-      const r = state.ctms[gid]; if(!r) return;
+      const r = ctmsRecOf(gid); if(!r) return;
       const list = ctmsEnsureStages(r);
       list.splice(Math.min(idx, list.length), 0, removed);
       if(removedData){ if(!r.milestones) r.milestones = {}; r.milestones[key] = removedData; }
@@ -2850,15 +2899,16 @@ function ctmsExcludedListHtml(){
 }
 function ctmsStop(gid){
   if(!ctmsCanEdit(gid)) return;
-  const removed = state.ctms[gid];
+  const removed = ctmsRecOf(gid);
   if(!removed) return;
   const g = ctmsAllGroups().find(x => x.gid === gid);
   const name = g ? g.primary.taskName : "";
-  delete state.ctms[gid];
+  removed.stoppedAt = new Date().toISOString(); // 기록은 보관 — 다시 추적할 때 이어서 쓸 수 있다
+  removed.stoppedBy = currentProfile ? currentProfile.name : "";
   logActivity('CTMS 추적 해제: "'+name+'"');
   state.lastAction = {
     gid,
-    restore: () => { state.ctms[gid] = removed; },
+    restore: () => { delete removed.stoppedAt; delete removed.stoppedBy; },
     undoMsg: 'CTMS 추적 해제 취소: "'+name+'"',
   };
   showUndoToast('"'+name+'"의 CTMS 추적을 해제했어요');
@@ -2876,7 +2926,7 @@ const ctmsCrosOf = (rec) => Array.isArray(rec.cros) && rec.cros.length ? rec.cro
 const ctmsCroText = (rec) => rec.croNone ? "해당 없음" : ctmsCrosOf(rec).filter(Boolean).join(", ");
 function ctmsCroUpdate(gid, fn){
   if(!ctmsCanEdit(gid)) return;
-  const rec = state.ctms[gid];
+  const rec = ctmsRecOf(gid);
   if(!rec) return;
   fn(rec);
   ctmsPersist(gid);
@@ -2904,7 +2954,7 @@ function ctmsLabeled(label, inner, basis){
 }
 function ctmsPlanChangeOpen(gid, key){
   if(!ctmsCanEdit(gid)) return;
-  const rec = state.ctms[gid]; if(!rec) return;
+  const rec = ctmsRecOf(gid); if(!rec) return;
   const m = (rec.milestones || {})[key] || {}, st = ctmsStagesOf(rec).find(x => x.key === key);
   showModal(
     '<div style="font-weight:800;font-size:14px;margin-bottom:4px;">계획 일정 변경</div>' +
@@ -2923,7 +2973,7 @@ function ctmsPlanChangeOpen(gid, key){
 }
 function ctmsPlanChangeSave(gid, key){
   if(!ctmsCanEdit(gid)) return;
-  const rec = state.ctms[gid]; if(!rec) return;
+  const rec = ctmsRecOf(gid); if(!rec) return;
   const m = rec.milestones[key]; if(!m) return;
   const plan = document.getElementById("cpc-plan").value, reason = document.getElementById("cpc-reason").value.trim();
   if(!/^\d{4}-\d{2}$/.test(plan)){ showToast("변경할 계획월을 입력해 주세요", { error: true }); return; }
@@ -2948,7 +2998,7 @@ function ctmsPlanHistoryTableHtml(m){
     '</tr>').join("") + '</tbody></table></div>';
 }
 function ctmsPlanHistoryOpen(gid, key){
-  const rec = state.ctms[gid]; if(!rec) return;
+  const rec = ctmsRecOf(gid); if(!rec) return;
   const m = (rec.milestones || {})[key] || {}, st = ctmsStagesOf(rec).find(x => x.key === key);
   const total = ctmsMonthDiff(ctmsPlanBaseline(m), m.plan);
   showModal(
@@ -3028,9 +3078,10 @@ function ctmsCardHtml(g){
         '</div>' +
         '<div style="display:flex;align-items:center;gap:6px;flex:0 0 auto;">' +
           (isAdmin() ? '<button class="add-btn" style="padding:7px 10px;font-size:12px;background:#fff;color:#B91C1C;border:1px solid #F3B8B8;" onclick="ctmsExcludeConfirm(\''+g.gid+'\')" title="CTMS에 해당하지 않는 과제를 이 목록에서 삭제">'+icon('trash',13)+' 삭제</button>' : '') +
-          '<button class="add-btn" style="padding:7px 12px;font-size:12px;" onclick="ctmsStart(\''+g.gid+'\')">'+icon('plus',13)+' CTMS 추적 시작</button>' +
+          '<button class="add-btn" style="padding:7px 12px;font-size:12px;" onclick="ctmsStart(\''+g.gid+'\')">'+icon('plus',13)+(ctmsStoppedRecOf(g.gid) ? ' CTMS 다시 추적' : ' CTMS 추적 시작')+'</button>' +
         '</div>' +
       '</div>' +
+      (ctmsStoppedRecOf(g.gid) ? '<div style="font-size:11.5px;color:#B45309;margin-top:6px;">추적 해제된 과제 · 이전 기록 보관 중 ('+ctmsStoppedSummaryHtml(ctmsStoppedRecOf(g.gid))+')</div>' : '') +
     '</div>';
   }
 
@@ -3684,8 +3735,8 @@ function ctmsExtExportSheets(wb){
   const nameOf = (g) => g.primary.taskName;
   const issueRows = [], costRows = [], planRows = [];
   groups.forEach(g => {
-    if(state.ctms[g.gid]) ctmsStagesOf(state.ctms[g.gid]).forEach(st => {
-      const m = (state.ctms[g.gid].milestones || {})[st.key] || {}, h = ctmsPlanHistoryOf(m);
+    if(ctmsRecOf(g.gid)) ctmsStagesOf(ctmsRecOf(g.gid)).forEach(st => {
+      const m = (ctmsRecOf(g.gid).milestones || {})[st.key] || {}, h = ctmsPlanHistoryOf(m);
       if(h.length > 1) h.forEach((e, i) => planRows.push({ "과제명": nameOf(g), "마일스톤": st.label, "구분": i === 0 ? "최초" : "변경 " + i,
         "계획월": e.plan, "이전 계획": i ? h[i - 1].plan : "", "변동": i ? ctmsDiffText(ctmsMonthDiff(h[i - 1].plan, e.plan)) : "", "사유": e.reason || "", "기록일": e.at || "", "기록자": e.by || "" }));
     });
