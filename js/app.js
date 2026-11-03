@@ -677,6 +677,11 @@ function fteExportSheets(wb){
       "종료월": a.endPeriod || "진행중",
       "과제상태": a.status || "준비중",
       "기간 변경 사유": a.periodNote || "",
+      "인수인계": a.handover && a.handover.needed ? (a.handover.doneDate ? "완료" : "진행중") : "",
+      "인계자": a.handover && a.handover.needed ? hoMemberName(a.handover.from) : "",
+      "인수인계 완료일": a.handover && a.handover.needed ? a.handover.doneDate || "" : "",
+      "과제 Training 일자": a.handover && a.handover.needed && a.handover.training && a.handover.training.done ? a.handover.training.date : "",
+      "과제 Training 내용": a.handover && a.handover.needed && a.handover.training && a.handover.training.done ? a.handover.training.contents : "",
     };
   });
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows1), "배정목록");
@@ -1445,12 +1450,14 @@ function memberSubRowHtml(a){
         (ended ? '<span style="font-size:10.5px;font-weight:700;padding:1px 6px;border-radius:999px;background:#EEF2F6;color:#64748B;">배정 종료</span>' :
           upcoming ? '<span style="font-size:10.5px;font-weight:700;padding:1px 6px;border-radius:999px;background:#FEF3E2;color:#B45309;">시작 예정</span>' : '') +
         '<span style="color:#94A3B8;font-size:11px;white-space:nowrap;">'+a.startPeriod+'~'+(a.endPeriod||"진행중")+'</span>' +
+        hoChipHtml(a) + // handover.js
       '</div>' +
       '<div style="display:flex;align-items:center;gap:8px;flex:0 0 auto;">' +
         statusSelectHtml(a) +
         fteEditInputHtml(a) +
         overrideToggleBtnHtml(a) +
         periodToggleBtnHtml(a) +
+        hoEditBtnHtml(a) +
         '<button class="icon-btn" onclick="removeAssignment(\''+a.id+'\')">'+icon('trash',14)+'</button>' +
       '</div>' +
     '</div>' + overridePanelHtml(a) + periodPanelHtml(a) +
@@ -1484,11 +1491,12 @@ function openCoAssignModal(id){
         '<div class="field"><div class="field-label">시작월</div>' +
           '<input class="input" id="ca-start" type="month" value="'+a.startPeriod+'"/></div>' +
       '</div>' +
+      hoCheckboxHtml("ca", false) + hoFieldsHtml("ca", null, hoFromCandidates(a, null)) + // handover.js
       '<div style="display:flex;gap:8px;margin-top:6px;">' +
         '<button class="add-btn" style="flex:1;justify-content:center;background:#fff;color:#475569;border:1px solid var(--border);" onclick="closeModal()">취소</button>' +
         '<button class="add-btn" style="flex:1;justify-content:center;" onclick="confirmCoAssign(\''+id+'\')">추가</button>' +
       '</div>'
-    )
+    ), available.length === 0 ? "" : "md"
   );
 }
 function confirmCoAssign(id){
@@ -1500,18 +1508,22 @@ function confirmCoAssign(id){
   const fte = Number(fteInput.value);
   if(!(fte > 0)) return;
   const start = startInput.value || a.startPeriod;
+  const handover = hoCollect("ca"); // handover.js
+  if(handover && handover.error){ showToast(handover.error, { error: true }); return; }
   if(!a.groupId) a.groupId = a.id;
   const newAssignment = {
     id: uid("as"), memberId: memberSel.value, taskTypeId: a.taskTypeId, productId: a.productId,
     taskName: a.taskName, fte, startPeriod: start, endPeriod: a.endPeriod, status: a.status,
     overrides: {}, groupId: a.groupId,
   };
+  if(handover) newAssignment.handover = handover;
   state.assignments.push(newAssignment);
   const m = state.members.find(x => x.id === memberSel.value);
-  logActivity('담당자 추가: "'+a.taskName+'" → '+(m?m.name:'') );
+  logActivity('담당자 추가: "'+a.taskName+'" → '+(m?m.name:'')+(handover ? ' (인수인계)' : '') );
   scheduleSave();
   closeModal();
   renderTabContent();
+  if(handover && handover.training.done) hoSyncTraining(newAssignment); // 교육 이력에 등록
 }
 
 /* ---------------- Assign ---------------- */
