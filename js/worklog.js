@@ -310,10 +310,11 @@ function renderWeeklyTab(){
     '<div style="font-weight:800;font-size:14px;margin-bottom:12px;">방문 기록 추가</div>' +
     '<div class="wk-form">' +
       inp("visit_date", "날짜", "date", "", todayYmd()) +
-      inp("task_name", "과제명", "text", "예: OO 시판후조사", "") +
-      inp("visit_place", "방문처", "text", "예: OO대학교병원", "") +
+      '<div><div class="field-label">과제</div>' + lkTaskSelectHtml("wk-gid", "", "", "wkTaskPick('wk')") + // links.js
+        '<input id="wk-task_name" class="input view-ok" type="text" placeholder="과제명 직접 입력" style="display:none;margin-top:6px;"/></div>' +
+      inp("visit_place", "방문처", "text", "예: OO대학교병원", "").replace('/>', ' list="lk-place-list"/>') +
       inp("region", "지역", "text", "예: 서울", "") +
-      inp("pi_name", "PI명", "text", "예: 홍길동 교수", "") +
+      inp("pi_name", "PI명", "text", "예: 홍길동 교수", "").replace('/>', ' list="lk-person-list" onchange="wkPiPick(\'wk\')"/>') +
       inp("reason", "방문사유", "text", "예: SIV", "") +
       inp("visitor", "방문자", "text", "", currentProfile ? currentProfile.name : "") +
     '</div>' +
@@ -336,7 +337,7 @@ function renderWeeklyTab(){
         const on = !!weekly.selected[r.id];
         return '<tr style="cursor:pointer;' + (on ? 'background:#E5F1F1;' : '') + '" onclick="weeklyToggle(\'' + r.id + '\')">' +
           '<td><input type="checkbox" class="view-ok" ' + (on ? 'checked' : '') + ' style="pointer-events:none;"/></td>' +
-          WEEKLY_COLS.map(c => '<td' + (c.key === "reason" ? ' style="white-space:normal;min-width:140px;text-align:left;"' : '') + '>' + esc(r[c.key]) + '</td>').join("") +
+          WEEKLY_COLS.map(c => '<td' + (c.key === "reason" ? ' style="white-space:normal;min-width:140px;text-align:left;"' : '') + '>' + (c.key === "task_name" ? wkTaskCellHtml(r) : esc(r[c.key])) + '</td>').join("") +
           '<td>' + (canEdit(r) ?
             '<div style="display:flex;gap:6px;justify-content:center;">' +
               '<button class="icon-btn view-ok" title="수정" style="color:#64748B;" onclick="event.stopPropagation();weeklyEditOpen(\'' + r.id + '\')">' + icon('edit', 14) + '</button>' +
@@ -346,7 +347,7 @@ function renderWeeklyTab(){
       }).join("") +
     '</tbody></table></div>';
 
-  return '<div class="stack">' + (canWrite() ? form : '') +
+  return '<div class="stack">' + lkListsHtml() + (canWrite() ? form : '') +
     '<div class="card">' +
       '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px;">' +
         '<div style="font-weight:800;font-size:14px;">방문 로그 <span style="font-size:12px;color:#94A3B8;font-weight:600;">' + rows.length + '건 · 행을 눌러 선택</span></div>' +
@@ -360,6 +361,7 @@ function renderWeeklyTab(){
 async function weeklyAdd(){
   const rec = {};
   WEEKLY_COLS.forEach(c => rec[c.key] = document.getElementById("wk-" + c.key).value.trim());
+  Object.assign(rec, wkTaskCollect("wk")); // links.js — 고른 과제(group_id)와 과제명
   if(!/^\d{4}-\d{2}-\d{2}$/.test(rec.visit_date)){ showToast("날짜를 YYYY-MM-DD 형식으로 입력해 주세요", { error: true }); return; }
   if(!rec.task_name && !rec.visit_place){ showToast("과제명이나 방문처를 입력해 주세요", { error: true }); return; }
   const btn = document.getElementById("wk-add");
@@ -381,7 +383,7 @@ function weeklyEditOpen(id){
     '<div class="modal-scroll wk-form" style="grid-template-columns:repeat(2,minmax(0,1fr));">' +
       WEEKLY_COLS.filter(c => c.key !== "reason").concat(WEEKLY_COLS.filter(c => c.key === "reason")).map(c =>
         '<div class="field"' + (c.key === "reason" ? ' style="grid-column:1 / -1;"' : '') + '><div class="field-label">' + c.label + '</div>' +
-        '<input id="wke-' + c.key + '" class="input" type="' + (c.key === "visit_date" ? "date" : "text") + '" value="' + esc(r[c.key]) + '"/></div>'
+        wkEditInputHtml(c, r) + '</div>' // links.js
       ).join("") +
     '</div>' +
     '<div style="display:flex;gap:8px;margin-top:6px;">' +
@@ -393,6 +395,7 @@ function weeklyEditOpen(id){
 async function weeklyEditSave(id){
   const rec = {};
   WEEKLY_COLS.forEach(c => rec[c.key] = document.getElementById("wke-" + c.key).value.trim());
+  Object.assign(rec, wkTaskCollect("wke"));
   if(!/^\d{4}-\d{2}-\d{2}$/.test(rec.visit_date)){ showToast("날짜를 YYYY-MM-DD 형식으로 입력해 주세요", { error: true }); return; }
   if(!rec.task_name && !rec.visit_place){ showToast("과제명이나 방문처를 입력해 주세요", { error: true }); return; }
   const btn = document.getElementById("wke-save");
@@ -423,7 +426,7 @@ function weeklyDeleteConfirm(id){
   if(!r) return;
   showModal(
     '<div style="font-weight:800;font-size:14px;margin-bottom:8px;">방문 기록 삭제</div>' +
-    '<div style="font-size:12.5px;color:#475569;line-height:1.6;margin-bottom:16px;">' + esc(r.visit_date) + ' · ' + esc(r.task_name || r.visit_place) + ' 기록을 삭제할까요? 되돌릴 수 없어요.</div>' +
+    '<div style="font-size:12.5px;color:#475569;line-height:1.6;margin-bottom:16px;">' + esc(r.visit_date) + ' · ' + esc(wkTaskName(r) || r.visit_place) + ' 기록을 삭제할까요? 되돌릴 수 없어요.</div>' +
     '<div style="display:flex;gap:8px;">' +
       '<button class="add-btn" style="flex:1;justify-content:center;background:#fff;color:#475569;border:1px solid var(--border);" onclick="closeModal()">취소</button>' +
       '<button class="add-btn" style="flex:1;justify-content:center;background:var(--danger);" onclick="weeklyDelete(\'' + id + '\')">삭제</button>' +
@@ -451,7 +454,7 @@ async function weeklyExport(){
 }
 function weeklyExportRow(r){
   const row = {};
-  WEEKLY_COLS.forEach(c => row[c.label] = r[c.key]);
+  WEEKLY_COLS.forEach(c => row[c.label] = c.key === "task_name" ? wkTaskName(r) : r[c.key]);
   return row;
 }
 
@@ -482,7 +485,7 @@ async function trainingLoad(){
 function trainingFiltered(){
   const f = training.f, q = f.q.trim().toLowerCase();
   return training.rows.filter(r =>
-    (!f.member || r.member === f.member) && (!f.scope || r.scope === f.scope) && (!f.type || r.edu_type === f.type) &&
+    (!f.member || trMemberName(r) === f.member) && (!f.scope || r.scope === f.scope) && (!f.type || r.edu_type === f.type) &&
     (!f.tx || trTx(r) === f.tx) &&
     (!q || [r.title, r.org, r.note].some(v => (v || "").toLowerCase().includes(q))));
 }
@@ -496,7 +499,7 @@ function renderTrainingTab(){
   const stat = (k, v, warn) => '<div class="tr-stat"><div class="k">' + k + '</div><div class="v"' + (warn ? ' style="color:#B45309;"' : '') + '>' + v + '</div></div>';
   const opt = (v, label, cur) => '<option value="' + esc(v) + '"' + (v === cur ? ' selected' : '') + '>' + esc(label) + '</option>';
   const sel = (key, list) => '<select class="input view-ok" style="width:auto;" onchange="trainingFilter(\'' + key + '\', this.value)">' + list.map(o => opt(o[0], o[1], f[key])).join("") + '</select>';
-  const members = [...new Set(rows.map(r => r.member).filter(Boolean))].sort((a, b) => a.localeCompare(b, "ko"));
+  const members = [...new Set(rows.map(trMemberName).filter(Boolean))].sort((a, b) => a.localeCompare(b, "ko"));
   return '<div class="stack">' +
     '<div class="tr-stats">' +
       stat("전체 교육 이력", rows.length + "건") +
@@ -631,7 +634,7 @@ function trainingListHtml(){
   return '<div style="overflow-x:auto;"><table>' +
     '<thead><tr><th>팀원</th><th>이수일</th><th>교육명 / 주관</th><th>시간</th><th>구분</th><th>유형</th><th>팀내 전달교육</th><th>비고</th><th></th></tr></thead><tbody>' +
     list.map(r => '<tr>' +
-      '<td style="font-weight:700;">' + esc(r.member) + '</td>' +
+      '<td style="font-weight:700;">' + esc(trMemberName(r)) + '</td>' +
       '<td>' + esc(r.edu_date) + '</td>' +
       '<td style="white-space:normal;min-width:180px;text-align:left;"><div style="font-weight:700;">' + esc(r.title) + '</div>' + (r.org ? '<div style="font-size:11.5px;color:#94A3B8;">' + esc(r.org) + '</div>' : '') + '</td>' +
       '<td>' + (r.hours != null ? esc(r.hours) + 'h' : '') + '</td>' +
@@ -668,7 +671,7 @@ function trainingEditOpen(id){
     '<div style="font-weight:800;font-size:14px;margin-bottom:12px;">' + (r ? '교육 이력 수정' : '교육 이력 등록') + '</div>' +
     '<div class="modal-scroll">' +
       '<div class="wk-form" style="grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,2fr);">' +
-        field("팀원 *", input("member", "text", "이름", currentProfile ? currentProfile.name : "")) +
+        field("팀원 *", trMemberSelectHtml(r)) + // links.js
         field("이수일 *", input("edu_date", "date", "", "")) +
         field("교육명 *", input("title", "text", "예: ICH E6(R3) GCP 개정 교육", "")) +
       '</div>' +
@@ -711,8 +714,9 @@ function trainingSync(){
 async function trainingSave(id){
   const val = (k) => document.getElementById("tre-" + k).value.trim();
   const hours = val("hours");
+  const memberId = val("member_id"), prevRow = id ? training.rows.find(x => x.id === id) : null;
   const rec = {
-    member: val("member"), edu_date: val("edu_date"), title: val("title"), org: val("org"),
+    member: memberId ? lkMemberName(memberId) : (prevRow ? prevRow.member : ""), member_id: memberId || null, edu_date: val("edu_date"), title: val("title"), org: val("org"),
     hours: hours === "" ? null : Number(hours), scope: val("scope"), edu_type: val("edu_type"), note: val("note"),
     tx_need: false, tx_status: null, tx_plan_date: null, tx_done_date: null, updated_at: new Date().toISOString(),
   };
@@ -750,7 +754,7 @@ function trainingDeleteConfirm(id){
   if(!r) return;
   showModal(
     '<div style="font-weight:800;font-size:14px;margin-bottom:8px;">교육 이력 삭제</div>' +
-    '<div style="font-size:12.5px;color:#475569;line-height:1.6;margin-bottom:16px;">' + esc(r.edu_date) + ' · ' + esc(r.member) + ' · ' + esc(r.title) + ' 기록을 삭제할까요? 되돌릴 수 없어요.</div>' +
+    '<div style="font-size:12.5px;color:#475569;line-height:1.6;margin-bottom:16px;">' + esc(r.edu_date) + ' · ' + esc(trMemberName(r)) + ' · ' + esc(r.title) + ' 기록을 삭제할까요? 되돌릴 수 없어요.</div>' +
     '<div style="display:flex;gap:8px;">' +
       '<button class="add-btn" style="flex:1;justify-content:center;background:#fff;color:#475569;border:1px solid var(--border);" onclick="closeModal()">취소</button>' +
       '<button class="add-btn" style="flex:1;justify-content:center;background:var(--danger);" onclick="trainingDelete(\'' + id + '\')">삭제</button>' +
@@ -779,7 +783,7 @@ async function trainingExport(){
 }
 function trainingExportRow(r){
   return {
-    "팀원": r.member, "이수일": r.edu_date, "교육명": r.title, "주관": r.org, "시간(h)": r.hours,
+    "팀원": trMemberName(r), "이수일": r.edu_date, "교육명": r.title, "주관": r.org, "시간(h)": r.hours,
     "구분": r.scope, "유형": r.edu_type, "전달교육": r.scope === "사외" ? TX_LABEL[trTx(r)] : "해당없음",
     "전달 계획일": r.tx_plan_date || "", "전달 실시일": r.tx_done_date || "", "비고": r.note,
   };

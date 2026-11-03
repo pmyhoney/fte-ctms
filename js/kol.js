@@ -168,7 +168,7 @@ function kolListHtml(){
       '</div>' +
       (open ? '<div class="kol-detail">' +
         row("학력", p.education) + row("주요 경력", p.career) + row("연구·논문 실적", p.papers) +
-        row("참여 임상 상세", p.trialDetail) + row("비고", p.note, true) +
+        row("참여 임상 상세", p.trialDetail) + row("비고", p.note, true) + lkKolIitHtml(p) + // links.js
       '</div>' : '') +
     '</div>';
   }).join("");

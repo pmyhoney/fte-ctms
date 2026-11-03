@@ -987,10 +987,11 @@ function renderDashboard(){
   const endingSoon = Array.from(endingSoonMap.values()).sort((a,b) => a.endPeriod.localeCompare(b.endPeriod));
   const ctmsDelayedList = ctmsDelayedTasks();
   const ctmsOpenIssues = ctmsOpenIssueCount();
+  const hoAlerts = hoAlertItems(); // links.js — 인수인계 미완료·인계자 배정 겹침
 
   let html = '<div class="stack">';
 
-  if(overCapacityMembers.length > 0 || endingSoon.length > 0 || ctmsDelayedList.length > 0 || ctmsOpenIssues > 0){
+  if(overCapacityMembers.length > 0 || endingSoon.length > 0 || ctmsDelayedList.length > 0 || ctmsOpenIssues > 0 || hoAlerts.length > 0){
     html += '<div class="card" style="border-color:#F3B8B8;background:#FEF6F6;">' +
       '<div style="display:flex;align-items:center;gap:7px;margin-bottom:10px;color:var(--danger);">' +
         icon('alert',16) + '<span style="font-weight:800;font-size:14px;">확인이 필요해요</span>' +
@@ -1012,6 +1013,7 @@ function renderDashboard(){
         '</div>' : '') +
       (ctmsOpenIssues > 0 ?
         '<div style="font-size:13px;color:#475569;line-height:1.5;">CTMS 미해결 이슈 <b style="color:var(--danger);">'+ctmsOpenIssues+'건</b>이 있어요 — CTMS 탭의 \'진행·이슈\'에서 확인해 주세요.</div>' : '') +
+      hoAlerts.map((t, i) => '<div style="font-size:13px;color:#475569;line-height:1.5;' + (i > 0 || overCapacityMembers.length > 0 || endingSoon.length > 0 || ctmsDelayedList.length > 0 || ctmsOpenIssues > 0 ? 'margin-top:8px;' : '') + '">' + t + '</div>').join("") +
     '</div>';
   }
 
@@ -1524,6 +1526,7 @@ function confirmCoAssign(id){
   closeModal();
   renderTabContent();
   if(handover && handover.training.done) hoSyncTraining(newAssignment); // 교육 이력에 등록
+  if(handover) hoEndSuggest(newAssignment); // links.js — 인수인계를 마쳤으면 인계자 종료월 확인
 }
 
 /* ---------------- Assign ---------------- */
@@ -1673,7 +1676,7 @@ function renderAssignTab(){
             'onfocus="this.style.borderColor=\'var(--border)\';this.style.background=\'#fff\';" ' +
             'onblur="this.style.borderColor=\'transparent\';this.style.background=\'transparent\';"/>' +
             assignGroupBadgesHtml(g.members, today) +
-            coAssignBtnHtml(primary) +
+            coAssignBtnHtml(primary) + p360Btn(g.gid, true) +
           '</div>' +
           '<select onchange="updateGroupTaskType(\''+g.gid+'\', this.value)" style="flex:0 0 auto;padding:5px 8px;border-radius:6px;border:1px solid var(--border);font-size:12px;max-width:100%;background:#F8FAFC;color:#475569;">' +
             (t ? '' : '<option value="">과제 유형 선택 (현재 삭제됨)</option>') +
@@ -3063,7 +3066,8 @@ function ctmsCardHtml(g){
   const nameLine = lineTagHtml(t ? t.line : null) +
     (prod ? '<span class="product-tag">'+esc(prod.name)+'</span>' : '') +
     '<span style="font-weight:700;font-size:13.5px;">'+esc(p.taskName)+'</span>' +
-    (activeNow.length > 1 ? '<span style="font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:999px;background:var(--msl-soft);color:var(--msl);white-space:nowrap;">공동/인수인계 '+activeNow.length+'명</span>' : '');
+    (activeNow.length > 1 ? '<span style="font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:999px;background:var(--msl-soft);color:var(--msl);white-space:nowrap;">공동/인수인계 '+activeNow.length+'명</span>' : '') +
+    p360Btn(g.gid, true); // links.js
   const metaLine = '<div style="font-size:11.5px;color:#94A3B8;margin-top:4px;line-height:1.5;">' +
     esc(names.join(", ")) + ' · ' + periodText + ' · 현재 투입 ' +
     '<b style="color:#16A34A;">'+fmt(curFte)+' FTE</b> · ' +

@@ -78,7 +78,7 @@ function iitAllRows(){
   });
   stored.forEach(r => {
     if(r.group_id && live.has(r.group_id)) return;
-    rows.push(Object.assign({}, r.data, { key: "r:" + r.id, id: r.id, gid: r.group_id, linked: false, orphan: !!r.group_id, hidden: r.hidden }));
+    rows.push(Object.assign({}, r.data, { product: iitProdName(r.data), key: "r:" + r.id, id: r.id, gid: r.group_id, linked: false, orphan: !!r.group_id, hidden: r.hidden }));
   });
   return rows.sort((a, b) => (a.product || "힣").localeCompare(b.product || "힣", "ko") || (a.taskName || "").localeCompare(b.taskName || "", "ko"));
 }
@@ -106,6 +106,7 @@ function renderIitTab(){
     if(!iit.loading){ iit.loading = true; iitLoad().finally(() => { iit.loading = false; }); }
     return '<div class="card"><div class="empty">불러오는 중…</div></div>';
   }
+  if(!LK_SRC.kol.has()) lkNeed("kol").then(() => { if(state.tab === "iit" && kol.rows) renderTabContentPreserveFocus(); }); // links.js — 연구자 KOL 표시
   const all = iitAllRows(), shown = all.filter(r => !r.hidden), f = iit.f, list = iitFiltered(all);
   const hiddenCount = all.length - shown.length;
   const stat = (k, v) => '<div class="tr-stat"><div class="k">' + k + '</div><div class="v">' + v + '</div></div>';
@@ -194,7 +195,7 @@ function iitListHtml(list, total){
         (r.linked ? '<div style="font-size:11px;color:#94A3B8;">' + esc([r.type, r.period].filter(Boolean).join(" · ")) + '</div>' :
           r.orphan ? '<div style="font-size:11px;color:#B45309;">배정에서 삭제된 과제</div>' : '<div style="font-size:11px;color:#94A3B8;">직접 추가</div>'), "min-width:180px;") +
       td(dash(r.site), "min-width:110px;") +
-      td(dash(r.investigator), "white-space:nowrap;") +
+      td(dash(r.investigator) + (kol.rows ? lkKolBadgeHtml(lkKolMatch(r.investigator, r.site, r.kolId)) : ''), "white-space:nowrap;") +
       td(dash(r.manager), "white-space:nowrap;") +
       td(iitSupportHtml(r.support), "min-width:90px;font-size:12px;") +
       '<td>' + iitStatusHtml(r) + '</td>' +
@@ -233,15 +234,16 @@ function iitEditOpen(key){
       :
         '<div class="wk-form" style="grid-template-columns:110px 1fr 2fr;">' +
           field("과제 구분", '<select id="iit-line" class="input"><option value="">선택 안 함</option>' + ["SC", "PC"].map(x => '<option' + (r && r.line === x ? ' selected' : '') + '>' + x + '</option>').join("") + '</select>') +
-          field("품목명", input("product", "예: 로제텔정").replace('/>', ' list="iit-product-list"/>') + '<datalist id="iit-product-list">' + products.map(x => '<option value="' + esc(x) + '">').join("") + '</datalist>') +
+          field("품목명", iitProductSelectHtml(r)) + // links.js — 품목 관리 목록에서 고른다
           field("과제명 *", input("taskName", "예: 로제텔정 시판 후 효과 연구")) +
         '</div>' +
-        field("담당자", input("manager", "예: 홍길동"))) +
+        field("담당자", input("manager", "예: 홍길동").replace('/>', ' list="iit-member-list"/>') + '<datalist id="iit-member-list">' + state.members.map(m => '<option value="' + esc(m.name) + '">').join("") + '</datalist>')) +
       '<div class="wk-form" style="grid-template-columns:1fr 1fr 1fr;">' +
         field("과제코드", input("code", "예: IIT-2026-01")) +
-        field("기관명", input("site", "예: 서울대학교병원")) +
-        field("연구자명", input("investigator", "예: 김연구")) +
+        field("기관명", input("site", "예: 서울대학교병원").replace('/>', ' list="lk-place-list" onchange="iitKolHint()"/>')) +
+        field("연구자명", input("investigator", "예: 김연구").replace('/>', ' list="lk-person-list" onchange="iitKolHint()"/>')) +
       '</div>' +
+      '<div id="iit-kol-hint" style="font-size:11.5px;margin:-4px 0 10px;"></div>' + lkListsHtml() + // links.js
       field("지원범위", '<div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;">' + check("ip", "IP", s.ip) + check("fund", "연구비", s.fund) + check("etc", "기타", s.etc) +
         '<input id="iit-sup-etcText" class="input" type="text" style="flex:1 1 160px;" placeholder="기타 지원 내용" value="' + esc(s.etcText || "") + '"/></div>') +
       // 배정 과제에서 진행 현황을 고르지 않으면 배정의 과제 상태를 계속 따라간다
@@ -262,6 +264,7 @@ function iitEditOpen(key){
   if(iit.formPapers.length === 0) iit.formPapers.push({ journal: "", vol: "", title: "", url: "" });
   iitPapersRender();
   iitFormSync();
+  lkNeed("kol").then(iitKolHint); // links.js
 }
 
 // 논문 입력 칸: 추가·삭제할 때마다 입력값을 먼저 iit.formPapers에 옮겨 담고 다시 그린다
@@ -320,7 +323,9 @@ async function iitSave(key){
   if(pubStatus === "완료"){ iitPapersCollect(); data.pub.papers = iit.formPapers.filter(p => IIT_PAPER_KEYS.some(k => p[k])); }
   // 배정 과제는 배정에서 지워졌을 때도 알아볼 수 있게 그때의 품목·과제명·담당자를 함께 저장해 둔다
   if(r && r.linked) Object.assign(data, { line: r.line, product: r.product, taskName: r.taskName, manager: r.manager });
-  else Object.assign(data, { line: val("line"), product: val("product"), taskName: val("taskName"), manager: val("manager") });
+  else Object.assign(data, { line: val("line"), taskName: val("taskName"), manager: val("manager") }, iitProductCollect()); // links.js
+  // 연구자를 KOL 명단과 맞춰 둔다 (명단을 못 불러왔으면 이전 값 유지)
+  if(kol.rows){ const k = lkKolMatch(data.investigator, data.site); data.kolId = k ? k.id : null; }
   if(!data.taskName){ showToast("과제명을 입력해 주세요", { error: true }); return; }
   const badUrl = data.pub.papers ? iit.formPapers.findIndex(p => p.url && !iitSafeUrl(p.url)) : -1; // 화면의 논문 번호 그대로 알려준다
   if(badUrl >= 0){ showToast("논문 " + (badUrl + 1) + "의 웹 링크는 http:// 또는 https:// 주소로 입력해 주세요", { error: true }); return; }
@@ -497,11 +502,12 @@ function iitDetailOpen(key){
     '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:10px;">' +
       '<div style="min-width:0;"><div style="font-weight:800;font-size:15px;">' + esc(r.taskName) + '</div>' +
         '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:4px;">' + (r.line === "SC" || r.line === "PC" ? lineTagHtml(r.line) : '') + (r.product ? '<span style="font-size:13px;color:#475569;">' + esc(r.product) + '</span>' : '') + iitStatusHtml(r) + '</div></div>' +
-      (edit && !r.hidden ? '<button class="btn-export" style="flex:0 0 auto;" onclick="iitEditOpen(\'' + key + '\')">' + icon('edit', 13) + ' 기본 정보 수정</button>' : '') +
+      '<div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;flex:0 0 auto;">' + (r.linked ? p360Btn(r.gid) : '') + // links.js
+      (edit && !r.hidden ? '<button class="btn-export" style="flex:0 0 auto;" onclick="iitEditOpen(\'' + key + '\')">' + icon('edit', 13) + ' 기본 정보 수정</button>' : '') + '</div>' +
     '</div>' +
     '<div class="modal-scroll iitd-grid">' +
       sec("기본 정보", '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;">' +
-        info("과제코드", dash(r.code)) + info("기관명", dash(r.site)) + info("연구자명", dash(r.investigator)) + info("담당자", dash(r.manager)) +
+        info("과제코드", dash(r.code)) + info("기관명", dash(r.site)) + info("연구자명", dash(r.investigator) + lkKolBadgeLater(r.investigator, r.site, r.kolId)) + info("담당자", dash(r.manager)) +
         info("지원범위", iitSupportHtml(r.support)) + (r.linked ? info("과제 유형 · 기간", dash([r.type, r.period].filter(Boolean).join(" · "))) : '') + '</div>', '', true) +
       sec("일정 · 계약",
         '<div class="wk-form" style="grid-template-columns:1fr 1fr;">' +

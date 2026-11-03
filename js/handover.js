@@ -70,7 +70,7 @@ async function hoSyncTraining(a, prevTrainingId){
   try{
     if(tr && tr.done){
       const rec = {
-        member: hoMemberName(a.memberId), edu_date: tr.date, title: "[인수인계] " + a.taskName,
+        member: hoMemberName(a.memberId), member_id: a.memberId || null, edu_date: tr.date, title: "[인수인계] " + a.taskName,
         org: ho.from ? "인계자 " + hoMemberName(ho.from) : "", hours: null, scope: "사내", edu_type: "과제",
         note: tr.contents + "\n(과제 배정 인수인계에서 등록)",
         tx_need: false, tx_status: null, tx_plan_date: null, tx_done_date: null, updated_at: new Date().toISOString(),
@@ -151,4 +151,5 @@ function hoEditSave(id){
   logActivity('인수인계 ' + (ho ? '기록' : '해제') + ': "' + a.taskName + '" → ' + hoMemberName(a.memberId));
   closeModal();
   hoSyncTraining(a, prevId);
+  if(ho) hoEndSuggest(a); // links.js — 인수인계를 마쳤으면 인계자 종료월 확인
 }
