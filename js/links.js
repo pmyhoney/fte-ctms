@@ -179,9 +179,9 @@ function trMemberSelectHtml(r){
 
 /* ---------------- 과제 360° 보기 ---------------- */
 function p360Btn(gid, small){
-  return '<button class="' + (small ? 'icon-btn' : 'btn-export') + ' view-ok" title="과제 정보 한눈에 보기 (배정·CTMS·IIT·방문·교육)" ' +
-    'style="' + (small ? 'width:auto;padding:0 6px;font-size:11px;font-weight:700;color:var(--accent);' : 'flex:0 0 auto;') + '" ' +
-    'onclick="event.stopPropagation();p360Open(\'' + gid + '\')">' + (small ? '360°' : icon('list', 13) + ' 과제 360°') + '</button>';
+  // 작은 버튼도 테두리 있는 알약 모양으로 (글자만 있으면 버튼인 줄 모른다)
+  return '<button class="' + (small ? 'p360-btn' : 'btn-export') + ' view-ok" title="과제 정보 한눈에 보기 (배정·CTMS·IIT·방문·교육)" ' +
+    'style="flex:0 0 auto;" onclick="event.stopPropagation();p360Open(\'' + gid + '\')">' + icon('list', small ? 12 : 13) + (small ? ' 360° 보기' : ' 과제 360°') + '</button>';
 }
 let p360Gid = null;
 function p360Open(gid){
