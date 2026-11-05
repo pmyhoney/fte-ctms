@@ -1,7 +1,7 @@
 /* ---------------- CTMS 참여 기관 (Site) ----------------
    과제 카드의 '기관 관리'에서 기관명·PI명을 입력하고 기관별 상태(준비·진행·종료·Drop)를 체크한다.
    rec.sites = [{ id, name, pi, status, kolId }]  (state.ctms[gid] 안에 함께 저장 — 회원은 save_ctms로 저장)
-   기관 목록이 있으면 기관 수는 목록에서 계산한다: 전체 = Drop을 뺀 기관 수, 개시 = '진행'으로 체크한 기관 수.
+   기관 목록이 있으면 기관 수는 목록에서 계산한다: 전체 = Drop을 뺀 기관 수, 개시 = '진행'·'종료' 기관 수 (개시했다가 끝난 기관도 개시 기관으로 센다).
    (rec.siteTarget·siteActive에 계산 값을 넣어 두므로 요약·엑셀·360° 보기 등 기존 화면은 그대로 쓴다)
    PI는 KOL 명단과 맞춰(kolId) KOL 상세에 'CTMS 참여 기관'으로 보여 준다 (links.js). */
 
@@ -12,7 +12,7 @@ const CTMS_SITE_META = {
 };
 const ctmsSitesOf = (rec) => Array.isArray(rec && rec.sites) ? rec.sites : [];
 function ctmsSiteCounts(sites){
-  return { total: sites.filter(s => s.status !== "Drop").length, active: sites.filter(s => s.status === "진행").length };
+  return { total: sites.filter(s => s.status !== "Drop").length, active: sites.filter(s => s.status === "진행" || s.status === "종료").length };
 }
 function ctmsSiteStatusHtml(st){
   const m = CTMS_SITE_META[st];
@@ -46,7 +46,7 @@ function ctmsSitesOpen(gid){
     '<div id="cs-sum" style="font-size:12.5px;color:#475569;margin-bottom:10px;"></div>' +
     '<div class="modal-scroll"><div id="cs-rows"></div>' +
       (edit ? '<button class="add-btn" style="width:100%;justify-content:center;background:#fff;color:var(--accent);border:1px dashed var(--accent);margin-top:4px;" onclick="ctmsSiteAdd()">' + icon('plus', 13) + ' 기관 추가</button>' : '') +
-      '<div style="font-size:11.5px;color:#94A3B8;margin-top:8px;line-height:1.6;">전체 기관 수는 Drop을 뺀 기관 수, 개시 기관 수는 \'진행\'으로 체크한 기관 수로 카드에 반영돼요. ' +
+      '<div style="font-size:11.5px;color:#94A3B8;margin-top:8px;line-height:1.6;">전체 기관 수는 Drop을 뺀 기관 수, 개시 기관 수는 \'진행\'·\'종료\' 기관 수(개시했다가 끝난 기관 포함)로 카드에 반영돼요.' +
         'PI명은 KOL 명단에서 찾아 연결하고, 연결된 KOL의 상세 정보에 이 과제가 표시돼요.</div>' +
     '</div>' + lkListsHtml() + // links.js — 기관·PI 자동 완성
     '<div style="display:flex;gap:8px;margin-top:10px;">' +
@@ -70,8 +70,10 @@ function ctmsSitesRender(){
   const dis = d.edit ? '' : ' disabled';
   const c = ctmsSiteCounts(d.rows.filter(r => r.name || r.pi));
   const sum = document.getElementById("cs-sum");
-  if(sum) sum.innerHTML = '전체 기관 <b>' + c.total + '</b> · 개시(진행) <b style="color:#1F5C8C;">' + c.active + '</b>' +
-    CTMS_SITE_STATUS.filter(s => s !== "진행").map(s => { const n = d.rows.filter(r => (r.name || r.pi) && r.status === s).length; return n ? ' · ' + s + ' ' + n : ''; }).join("");
+  const cnt = (st) => d.rows.filter(r => (r.name || r.pi) && r.status === st).length;
+  if(sum) sum.innerHTML = '전체 기관 <b>' + c.total + '</b> · 개시 <b style="color:#1F5C8C;">' + c.active + '</b>' +
+    (c.active ? ' <span style="color:#94A3B8;">(진행 ' + cnt("진행") + ' · 종료 ' + cnt("종료") + ')</span>' : '') +
+    ["준비", "Drop"].map(st => cnt(st) ? ' · ' + st + ' ' + cnt(st) : '').join("");
   if(!d.rows.length){ box.innerHTML = '<div class="empty" style="padding:18px;">입력된 기관이 없어요.</div>'; return; }
   box.innerHTML = d.rows.map((r, i) => {
     const k = lkKolMatch(r.pi, r.name, r.kolId); // links.js
