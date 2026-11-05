@@ -110,6 +110,7 @@ function lkPlaceList(){
   return lkUniq([].concat(
     (weekly.rows || []).map(r => ({ v: r.visit_place })),
     iit.rows ? iitAllRows().map(r => ({ v: r.site })) : [],
+    Object.keys(state.ctms || {}).flatMap(gid => ctmsSitesOf(ctmsRecOf(gid)).map(s => ({ v: s.name }))), // sites.js
     (kol.rows || []).map(p => ({ v: lkHospShort(p.hospital) }))
   )).sort((a, b) => a.v.localeCompare(b.v, "ko"));
 }
@@ -117,7 +118,8 @@ function lkPersonList(){
   return lkUniq([].concat(
     (kol.rows || []).map(p => ({ v: p.name, l: [lkHospShort(p.hospital), lkKolCatName(p), "KOL"].filter(Boolean).join(" · ") })),
     iit.rows ? iitAllRows().map(r => ({ v: r.investigator, l: [r.site, "IIT 연구자"].filter(Boolean).join(" · ") })) : [],
-    (weekly.rows || []).map(r => ({ v: r.pi_name, l: r.visit_place }))
+    (weekly.rows || []).map(r => ({ v: r.pi_name, l: r.visit_place })),
+    Object.keys(state.ctms || {}).flatMap(gid => ctmsSitesOf(ctmsRecOf(gid)).map(s => ({ v: s.pi, l: s.name })))
   ));
 }
 function lkFillLists(){
@@ -247,7 +249,7 @@ function p360Html(gid){
       '<div style="margin-top:10px;">' + table(["단계", "계획", "실적", "계획 변경"], ctmsStagesOf(rec).map(st => {
         const m = (rec.milestones || {})[st.key] || {}, n = ctmsPlanChangeCount(m), late = !m.actual && m.plan && m.plan < now;
         return [esc(st.label), m.plan ? '<span style="' + (late ? 'color:#B91C1C;font-weight:700;' : '') + '">' + esc(m.plan) + (late ? ' (지연)' : '') + '</span>' : '–', dash(m.actual), n ? n + "회 (최초 " + esc(ctmsPlanBaseline(m) || "") + ")" : "–"];
-      })) + '</div>';
+      })) + '</div>' + ctmsSiteTableHtml(rec); // sites.js
   }else{
     ctmsInner = none(stopped ? "CTMS 추적이 해제된 과제예요 (이전 기록 보관 중: " + ctmsStoppedSummaryHtml(stopped) + ")" : "CTMS로 추적하지 않는 과제예요") +
       (issues.length || cost.length ? none("진행·이슈 " + issues.length + "건 · 비용 기록 " + cost.length + "건") : '');

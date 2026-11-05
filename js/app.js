@@ -2739,6 +2739,7 @@ function ctmsSetField(gid, field, val){
   if(!ctmsCanEdit(gid)) return;
   const rec = ctmsRecOf(gid);
   if(!rec) return;
+  if((field === "siteTarget" || field === "siteActive") && ctmsSitesOf(rec).length) return; // sites.js — 기관 목록에서 계산
   if(CTMS_NUM_FIELDS.indexOf(field) >= 0){
     const n = val === "" ? null : Math.floor(Number(val));
     rec[field] = (n === null || isNaN(n) || n < 0) ? null : n;
@@ -3104,7 +3105,7 @@ function ctmsCardHtml(g){
       ctmsBarHtml(msPct, CTMS_HEALTH[s.health].color) + '<div style="font-size:11px;color:#94A3B8;margin-top:4px;">'+esc(nextText)+'</div></div>' +
     '<div style="flex:1 1 130px;min-width:0;"><div style="font-size:11px;color:#64748B;margin-bottom:4px;">피험자 <b>'+(rec.subjEnrolled || 0)+'/'+(rec.subjTarget || 0)+'</b>'+(rec.subjTarget ? ' ('+subjPct+'%)' : '')+'</div>' +
       ctmsBarHtml(subjPct, "#3E6FB0") + '</div>' +
-    '<div style="flex:1 1 110px;min-width:0;"><div style="font-size:11px;color:#64748B;margin-bottom:4px;">기관 개시 <b>'+(rec.siteActive || 0)+'/'+(rec.siteTarget || 0)+'</b></div>' +
+    '<div style="flex:1 1 110px;min-width:0;"><div style="font-size:11px;color:#64748B;margin-bottom:4px;">기관 개시 <b>'+(rec.siteActive || 0)+'/'+(rec.siteTarget || 0)+'</b>'+ctmsSiteBtnHtml(g.gid, rec)+'</div>' + // sites.js
       ctmsBarHtml(sitePct, "#7C5CBF") + '</div>' +
   '</div>';
 
@@ -3116,8 +3117,8 @@ function ctmsCardHtml(g){
         ctmsCroHtml(g.gid, rec) +
       '</div>' +
       '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">' +
-        ctmsLabeled("기관 수 (계획)", ctmsNumInput(g.gid, "siteTarget", rec.siteTarget, "0")) +
-        ctmsLabeled("기관 수 (개시)", ctmsNumInput(g.gid, "siteActive", rec.siteActive, "0")) +
+        ctmsLabeled("기관 수 (계획)", ctmsSiteNumHtml(g.gid, rec, "siteTarget")) + // sites.js — 기관 목록이 있으면 계산 값
+        ctmsLabeled("기관 수 (개시)", ctmsSiteNumHtml(g.gid, rec, "siteActive")) +
         ctmsLabeled("피험자 (목표)", ctmsNumInput(g.gid, "subjTarget", rec.subjTarget, "0")) +
         ctmsLabeled("피험자 (등록)", ctmsNumInput(g.gid, "subjEnrolled", rec.subjEnrolled, "0")) +
         ctmsLabeled("피험자 (완료)", ctmsNumInput(g.gid, "subjCompleted", rec.subjCompleted, "0")) +
@@ -3757,6 +3758,8 @@ function ctmsExtExportSheets(wb){
   if(issueRows.length > 0) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(issueRows), "CTMS 진행·이슈");
   if(costRows.length > 0) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(costRows), "CTMS 비용");
   if(planRows.length > 0) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(planRows), "CTMS 계획 변경 이력");
+  const siteRows = ctmsSiteExportRows(groups); // sites.js
+  if(siteRows.length > 0) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(siteRows), "CTMS 기관");
 }
 
 function ctmsExportRows(){

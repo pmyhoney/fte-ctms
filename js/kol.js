@@ -151,7 +151,7 @@ function kolListHtml(){
             '<span style="font-weight:800;font-size:14.5px;">' + esc(p.name) + '</span>' +
             (ev ? '<span class="kol-eval' + (kol.evalOpen === p.id ? ' show' : '') + '" onclick="event.stopPropagation();kolEval(' + p.id + ')">' + (p.evaluation === 1 ? '👍' : '👎') +
               '<span class="kol-eval-tip"><b>' + (p.evaluation === 1 ? '추천 사유' : '비추천 사유') + '</b>' + kolList(p.evalTags).map(t => '· ' + esc(t)).join('<br/>') + '</span></span>' : '') +
-            (kolList(p.trials).length ? '<span class="kol-trial-tag">임상 참여</span>' : '') +
+            (kolList(p.trials).length || lkKolCtmsRows(p).length ? '<span class="kol-trial-tag">임상 참여</span>' : '') + // sites.js — CTMS 기관 PI도
           '</div>' +
           (roleText ? '<div style="font-size:12px;color:var(--accent);font-weight:600;">' + esc(roleText) + '</div>' : '') +
           '<div style="font-size:12.5px;color:#64748B;">' + esc(p.hospital || '소속 미상') + '</div>' +
@@ -168,7 +168,7 @@ function kolListHtml(){
       '</div>' +
       (open ? '<div class="kol-detail">' +
         row("학력", p.education) + row("주요 경력", p.career) + row("연구·논문 실적", p.papers) +
-        row("참여 임상 상세", p.trialDetail) + row("비고", p.note, true) + lkKolIitHtml(p) + // links.js
+        row("참여 임상 상세", p.trialDetail) + row("비고", p.note, true) + lkKolIitHtml(p) + lkKolCtmsHtml(p) + // sites.js // links.js
       '</div>' : '') +
     '</div>';
   }).join("");
