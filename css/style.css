@@ -173,3 +173,6 @@ body.save-blocked #tabcontent input:not(.view-ok){pointer-events:none;background
 .p360-btn:hover{background:var(--accent);color:#fff;}
 .site-btn{background:var(--accent);color:#fff;padding:2px 9px;}
 .site-btn:hover{filter:brightness(1.1);background:var(--accent);color:#fff;}
+/* CTMS 카드 요약 막대 제목: 높이를 고정해 세 막대가 같은 선에 오게 */
+.ctms-bar-label{display:flex;align-items:center;gap:6px;height:22px;margin-bottom:4px;font-size:11px;color:#64748B;white-space:nowrap;}
+.ctms-bar-label .p360-btn{padding:1px 8px;line-height:1.3;}

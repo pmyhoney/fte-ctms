@@ -244,7 +244,7 @@ function p360Html(gid){
     ctmsInner = grid([info("진행 상태", ctmsHealthBadge(s.health)), info("마일스톤", s.done + " / " + s.total + " 완료"),
       info("프로토콜·과제 번호", dash(rec.protocolNo)), info("CRO", dash(ctmsCroText(rec))),
       info("기관 (개시/목표)", (rec.siteActive || 0) + " / " + (rec.siteTarget || 0)),
-      info("피험자 (등록/목표)", (rec.subjEnrolled || 0) + " / " + (rec.subjTarget || 0)),
+      info("시험대상자 (등록/목표)", (rec.subjEnrolled || 0) + " / " + (rec.subjTarget || 0)),
       info("미해결 이슈", openIssues + "건"), info("비용 계획/집행 (천원)", costSum("plan").toLocaleString("ko-KR") + " / " + costSum("actual").toLocaleString("ko-KR"))]) +
       '<div style="margin-top:10px;">' + table(["단계", "계획", "실적", "계획 변경"], ctmsStagesOf(rec).map(st => {
         const m = (rec.milestones || {})[st.key] || {}, n = ctmsPlanChangeCount(m), late = !m.actual && m.plan && m.plan < now;

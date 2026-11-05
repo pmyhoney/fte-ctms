@@ -22,7 +22,7 @@ function ctmsSiteStatusHtml(st){
 function ctmsSiteBtnHtml(gid, rec){
   const n = ctmsSitesOf(rec).length;
   // 채운 색 버튼 (테두리만 있으면 눈에 잘 안 띈다)
-  return '<button class="p360-btn site-btn view-ok" style="margin-left:6px;" title="참여 기관·PI 입력과 기관별 상태" onclick="event.stopPropagation();ctmsSitesOpen(\'' + gid + '\')">' +
+  return '<button class="p360-btn site-btn view-ok" title="참여 기관·PI 입력과 기관별 상태" onclick="event.stopPropagation();ctmsSitesOpen(\'' + gid + '\')">' +
     icon('list', 11) + (n ? ' 기관 관리 (' + n + ')' : ' 기관 입력') + '</button>';
 }
 // 펼친 카드의 기관 수 칸 옆 큰 버튼

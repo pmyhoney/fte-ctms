@@ -2423,7 +2423,7 @@ const CTMS_STAGES = [
   { key: "irb", label: "IRB·심의 승인" },
   { key: "contract", label: "계약 체결" },
   { key: "siv", label: "기관 개시(SIV)" },
-  { key: "fpi", label: "첫 피험자 등록(FPI)" },
+  { key: "fpi", label: "첫 시험대상자 등록(FPI)" },
   { key: "lpi", label: "등록 완료(LPI)" },
   { key: "lplv", label: "마지막 방문(LPLV)" },
   { key: "dbl", label: "DB Lock" },
@@ -2689,7 +2689,7 @@ function ctmsStoppedSummaryHtml(r){
   const items = [
     r.protocolNo ? "프로토콜 " + esc(r.protocolNo) : "",
     ms ? "마일스톤 " + ms + "개 입력" : "",
-    r.subjTarget || r.subjEnrolled ? "피험자 " + (r.subjEnrolled || 0) + "/" + (r.subjTarget || 0) : "",
+    r.subjTarget || r.subjEnrolled ? "시험대상자 " + (r.subjEnrolled || 0) + "/" + (r.subjTarget || 0) : "",
     r.siteTarget || r.siteActive ? "기관 " + (r.siteActive || 0) + "/" + (r.siteTarget || 0) : "",
     r.note ? "비고 있음" : "",
   ].filter(Boolean);
@@ -3101,11 +3101,11 @@ function ctmsCardHtml(g){
   const overdueText = s.overdue.length > 0 ? ' · <b style="color:#B91C1C;">지연 '+s.overdue.length+'단계</b>' : '';
 
   const summaryHtml = '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:10px;">' +
-    '<div style="flex:1 1 150px;min-width:0;"><div style="font-size:11px;color:#64748B;margin-bottom:4px;">마일스톤 <b>'+s.done+'/'+s.total+'</b>'+overdueText+'</div>' +
+    '<div style="flex:1 1 150px;min-width:0;"><div class="ctms-bar-label">마일스톤 <b>'+s.done+'/'+s.total+'</b>'+overdueText+'</div>' +
       ctmsBarHtml(msPct, CTMS_HEALTH[s.health].color) + '<div style="font-size:11px;color:#94A3B8;margin-top:4px;">'+esc(nextText)+'</div></div>' +
-    '<div style="flex:1 1 130px;min-width:0;"><div style="font-size:11px;color:#64748B;margin-bottom:4px;">피험자 <b>'+(rec.subjEnrolled || 0)+'/'+(rec.subjTarget || 0)+'</b>'+(rec.subjTarget ? ' ('+subjPct+'%)' : '')+'</div>' +
+    '<div style="flex:1 1 130px;min-width:0;"><div class="ctms-bar-label">시험대상자 <b>'+(rec.subjEnrolled || 0)+'/'+(rec.subjTarget || 0)+'</b>'+(rec.subjTarget ? ' ('+subjPct+'%)' : '')+'</div>' +
       ctmsBarHtml(subjPct, "#3E6FB0") + '</div>' +
-    '<div style="flex:1 1 110px;min-width:0;"><div style="font-size:11px;color:#64748B;margin-bottom:4px;">기관 개시 <b>'+(rec.siteActive || 0)+'/'+(rec.siteTarget || 0)+'</b>'+ctmsSiteBtnHtml(g.gid, rec)+'</div>' + // sites.js
+    '<div style="flex:1 1 110px;min-width:0;"><div class="ctms-bar-label">기관 개시 <b>'+(rec.siteActive || 0)+'/'+(rec.siteTarget || 0)+'</b>'+ctmsSiteBtnHtml(g.gid, rec)+'</div>' + // sites.js
       ctmsBarHtml(sitePct, "#7C5CBF") + '</div>' +
   '</div>';
 
@@ -3120,9 +3120,9 @@ function ctmsCardHtml(g){
         ctmsLabeled("기관 수 (계획)", ctmsSiteNumHtml(g.gid, rec, "siteTarget")) + // sites.js — 기관 목록이 있으면 계산 값
         ctmsLabeled("기관 수 (개시)", ctmsSiteNumHtml(g.gid, rec, "siteActive")) +
         ctmsSiteBigBtnHtml(g.gid, rec) +
-        ctmsLabeled("피험자 (목표)", ctmsNumInput(g.gid, "subjTarget", rec.subjTarget, "0")) +
-        ctmsLabeled("피험자 (등록)", ctmsNumInput(g.gid, "subjEnrolled", rec.subjEnrolled, "0")) +
-        ctmsLabeled("피험자 (완료)", ctmsNumInput(g.gid, "subjCompleted", rec.subjCompleted, "0")) +
+        ctmsLabeled("시험대상자 (목표)", ctmsNumInput(g.gid, "subjTarget", rec.subjTarget, "0")) +
+        ctmsLabeled("시험대상자 (등록)", ctmsNumInput(g.gid, "subjEnrolled", rec.subjEnrolled, "0")) +
+        ctmsLabeled("시험대상자 (완료)", ctmsNumInput(g.gid, "subjCompleted", rec.subjCompleted, "0")) +
       '</div>' +
       '<div style="font-size:11.5px;font-weight:700;color:#64748B;margin:12px 0 6px;">마일스톤 (월 단위)</div>' +
       ctmsMilestoneRowsHtml(g) +
@@ -3194,7 +3194,7 @@ function renderCtmsTrackerTab(){
         '<div class="subtotal-value">'+delayedCount+'<span class="subtotal-unit">건</span></div></div>' +
       '<div class="subtotal-item" style="background:#E7F6EC;"><div class="subtotal-label" style="color:#16A34A;">전 단계 완료</div>' +
         '<div class="subtotal-value">'+doneCount+'<span class="subtotal-unit">건</span></div></div>' +
-      '<div class="subtotal-item" style="background:#EAF1FB;"><div class="subtotal-label" style="color:#3E6FB0;">피험자 등록</div>' +
+      '<div class="subtotal-item" style="background:#EAF1FB;"><div class="subtotal-label" style="color:#3E6FB0;">시험대상자 등록</div>' +
         '<div class="subtotal-value">'+subjEnrolled+'<span class="subtotal-unit"> / '+subjTarget+'명'+(subjTarget ? ' ('+ctmsPct(subjEnrolled, subjTarget)+'%)' : '')+'</span></div></div>' +
     '</div>' +
     '<div style="display:flex;gap:6px;">' +
@@ -3783,9 +3783,9 @@ function ctmsExportRows(){
       "마일스톤 완료": s.done + "/" + s.total,
       "기관 수(계획)": rec.siteTarget === null || rec.siteTarget === undefined ? "" : rec.siteTarget,
       "기관 수(개시)": rec.siteActive === null || rec.siteActive === undefined ? "" : rec.siteActive,
-      "피험자(목표)": rec.subjTarget === null || rec.subjTarget === undefined ? "" : rec.subjTarget,
-      "피험자(등록)": rec.subjEnrolled === null || rec.subjEnrolled === undefined ? "" : rec.subjEnrolled,
-      "피험자(완료)": rec.subjCompleted === null || rec.subjCompleted === undefined ? "" : rec.subjCompleted,
+      "시험대상자(목표)": rec.subjTarget === null || rec.subjTarget === undefined ? "" : rec.subjTarget,
+      "시험대상자(등록)": rec.subjEnrolled === null || rec.subjEnrolled === undefined ? "" : rec.subjEnrolled,
+      "시험대상자(완료)": rec.subjCompleted === null || rec.subjCompleted === undefined ? "" : rec.subjCompleted,
       "등록률(%)": rec.subjTarget ? ctmsPct(rec.subjEnrolled || 0, rec.subjTarget) : "",
     };
     ctmsStagesOf(rec).forEach(st => {
