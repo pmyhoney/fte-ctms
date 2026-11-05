@@ -3119,6 +3119,7 @@ function ctmsCardHtml(g){
       '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">' +
         ctmsLabeled("기관 수 (계획)", ctmsSiteNumHtml(g.gid, rec, "siteTarget")) + // sites.js — 기관 목록이 있으면 계산 값
         ctmsLabeled("기관 수 (개시)", ctmsSiteNumHtml(g.gid, rec, "siteActive")) +
+        ctmsSiteBigBtnHtml(g.gid, rec) +
         ctmsLabeled("피험자 (목표)", ctmsNumInput(g.gid, "subjTarget", rec.subjTarget, "0")) +
         ctmsLabeled("피험자 (등록)", ctmsNumInput(g.gid, "subjEnrolled", rec.subjEnrolled, "0")) +
         ctmsLabeled("피험자 (완료)", ctmsNumInput(g.gid, "subjCompleted", rec.subjCompleted, "0")) +

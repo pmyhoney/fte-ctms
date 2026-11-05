@@ -21,8 +21,15 @@ function ctmsSiteStatusHtml(st){
 // 카드의 기관 개시 옆 버튼
 function ctmsSiteBtnHtml(gid, rec){
   const n = ctmsSitesOf(rec).length;
-  return '<button class="p360-btn view-ok" style="margin-left:6px;padding:1px 7px;" title="참여 기관·PI 입력과 기관별 상태" onclick="event.stopPropagation();ctmsSitesOpen(\'' + gid + '\')">' +
-    icon('list', 11) + (n ? ' 기관 ' + n : ' 기관 입력') + '</button>';
+  // 채운 색 버튼 (테두리만 있으면 눈에 잘 안 띈다)
+  return '<button class="p360-btn site-btn view-ok" style="margin-left:6px;" title="참여 기관·PI 입력과 기관별 상태" onclick="event.stopPropagation();ctmsSitesOpen(\'' + gid + '\')">' +
+    icon('list', 11) + (n ? ' 기관 관리 (' + n + ')' : ' 기관 입력') + '</button>';
+}
+// 펼친 카드의 기관 수 칸 옆 큰 버튼
+function ctmsSiteBigBtnHtml(gid, rec){
+  const n = ctmsSitesOf(rec).length;
+  return '<div style="flex:0 0 auto;display:flex;align-items:flex-end;"><button class="add-btn view-ok" style="padding:6px 12px;font-size:12px;white-space:nowrap;" title="참여 기관·PI 입력과 기관별 상태" onclick="event.stopPropagation();ctmsSitesOpen(\'' + gid + '\')">' +
+    icon('list', 13) + (n ? ' 기관 관리 (' + n + ')' : ' 기관·PI 입력') + '</button></div>';
 }
 // 펼친 카드의 기관 수 칸: 기관 목록이 있으면 계산 값만 보여 준다
 function ctmsSiteNumHtml(gid, rec, field){

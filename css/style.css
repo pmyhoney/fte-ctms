@@ -171,3 +171,5 @@ body.save-blocked #tabcontent input:not(.view-ok){pointer-events:none;background
 /* 과제 360° 보기 버튼 (links.js) */
 .p360-btn{display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:999px;border:1px solid var(--accent);background:#fff;color:var(--accent);font-size:11px;font-weight:700;line-height:1.4;white-space:nowrap;cursor:pointer;vertical-align:middle;}
 .p360-btn:hover{background:var(--accent);color:#fff;}
+.site-btn{background:var(--accent);color:#fff;padding:2px 9px;}
+.site-btn:hover{filter:brightness(1.1);background:var(--accent);color:#fff;}
