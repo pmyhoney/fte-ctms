@@ -119,10 +119,16 @@ function hoChipHtml(a){
 }
 // 같은 과제에 담당자가 둘 이상일 때만 인수인계를 기록할 수 있다
 function hoEditBtnHtml(a){
-  if(a.handover && a.handover.needed) return '';
+  if(a.handover) return ''; // 이미 기록했거나 '필요 없음'으로 저장한 담당자
   if(!a.groupId || a.id === a.groupId) return ''; // 처음 배정된 담당자(보통 인계자)에게는 표시하지 않는다
   if(hoFromCandidates(a, a.memberId).length === 0) return '';
   return '<button class="icon-btn" title="인수인계 기록" style="font-size:11px;font-weight:700;color:#64748B;width:auto;padding:0 6px;" onclick="hoEditOpen(\'' + a.id + '\')">인계</button>';
+}
+// '필요 없음'으로 저장한 뒤 생각이 바뀌었을 때 되돌리는 길 (배정 기간 수정 패널 안)
+function hoReopenHtml(a){
+  if(!a.handover || a.handover.needed || !isAdmin()) return '';
+  return '<div style="font-size:11px;color:#94A3B8;margin-bottom:8px;">인수인계 필요 없음으로 저장됨 · ' +
+    '<a href="#" style="color:#1F5C8C;font-weight:700;" onclick="event.preventDefault();hoEditOpen(\'' + a.id + '\')">변경</a></div>';
 }
 
 function hoEditOpen(id){
@@ -147,8 +153,8 @@ function hoEditSave(id){
   const prevId = a.handover && a.handover.training ? a.handover.training.trainingId : null;
   const ho = hoCollect("hoe", a.handover);
   if(ho && ho.error){ showToast(ho.error, { error: true }); return; }
-  a.handover = ho;
-  logActivity('인수인계 ' + (ho ? '기록' : '해제') + ': "' + a.taskName + '" → ' + hoMemberName(a.memberId));
+  a.handover = ho || { needed: false }; // null(아직 안 정함)과 구분해 '필요 없음'을 저장한다
+  logActivity('인수인계 ' + (ho ? '기록' : '필요 없음') + ': "' + a.taskName + '" → ' + hoMemberName(a.memberId));
   closeModal();
   hoSyncTraining(a, prevId);
   if(ho) hoEndSuggest(a); // links.js — 인수인계를 마쳤으면 인계자 종료월 확인

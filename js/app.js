@@ -1360,6 +1360,7 @@ function periodPanelHtml(a){
   return '<div style="margin-top:8px;padding:10px;border:1px dashed var(--border);border-radius:8px;background:#F8FAFC;">' +
     '<div style="font-size:11px;font-weight:700;color:#64748B;margin-bottom:8px;">배정 기간 수정 <span style="font-weight:500;color:#94A3B8;">(상태는 그대로 유지돼요)</span></div>' +
     (a.periodNote ? '<div style="font-size:11px;color:#94A3B8;margin-bottom:8px;">최근 변경 사유: '+esc(a.periodNote)+'</div>' : '') +
+    hoReopenHtml(a) + // handover.js
     '<div class="row" style="gap:6px;margin-bottom:6px;">' +
       '<div style="flex:1;">' +
         '<div style="font-size:10.5px;color:#94A3B8;margin-bottom:3px;">시작월</div>' +
@@ -1520,7 +1521,7 @@ function confirmCoAssign(id){
     taskName: a.taskName, fte, startPeriod: start, endPeriod: a.endPeriod, status: a.status,
     overrides: {}, groupId: a.groupId,
   };
-  if(handover) newAssignment.handover = handover;
+  newAssignment.handover = handover || { needed: false }; // 체크하지 않고 추가하면 '필요 없음'으로 저장
   state.assignments.push(newAssignment);
   const m = state.members.find(x => x.id === memberSel.value);
   logActivity('담당자 추가: "'+a.taskName+'" → '+(m?m.name:'')+(handover ? ' (인수인계)' : '') );
