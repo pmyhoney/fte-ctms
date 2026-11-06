@@ -176,3 +176,18 @@ body.save-blocked #tabcontent input:not(.view-ok){pointer-events:none;background
 /* CTMS 카드 요약 막대 제목: 높이를 고정해 세 막대가 같은 선에 오게 */
 .ctms-bar-label{display:flex;align-items:center;gap:6px;height:22px;margin-bottom:4px;font-size:11px;color:#64748B;white-space:nowrap;}
 .ctms-bar-label .p360-btn{padding:1px 8px;line-height:1.3;}
+/* 팀원 색 배지 · 재택 일지 미작성 (wfhalert.js) */
+.mc-chip{flex:0 0 24px;width:24px;height:24px;padding:0;border-radius:50%;border:1px solid rgba(0,0,0,.15);cursor:pointer;}
+.mc-chip.none{background:#fff;border:1.5px dashed #94A3B8;}
+.mc-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;}
+.mc-swatch{height:48px;padding:2px 4px;border:none;border-radius:10px;font-size:11px;font-weight:700;line-height:1.25;overflow:hidden;cursor:pointer;}
+.mc-swatch.on{outline:3px solid var(--ink);outline-offset:1px;font-size:16px;}
+.wfh-name.wfh-badge{font-weight:700;border-radius:4px;padding:1px 4px;flex:0 0 auto;}
+.wfh-name.wfh-badge:hover{text-decoration:none;filter:brightness(.92);}
+.wfh-name.wfh-badge.miss{box-shadow:inset 0 0 0 1.5px #DC2626;}
+.wfh-tag.miss{background:#fff;color:#DC2626;border:1px solid #DC2626;}
+.wfh-legend{display:flex;flex-wrap:wrap;gap:6px 12px;margin-bottom:10px;}
+.wfh-legend-item{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:#475569;white-space:nowrap;}
+.wfh-legend-name{display:inline-block;padding:1px 7px;border-radius:4px;font-size:11.5px;font-weight:700;white-space:nowrap;}
+.tab-count{display:inline-flex;align-items:center;justify-content:center;min-width:17px;height:17px;padding:0 4px;border-radius:999px;background:var(--danger);color:#fff;font-size:10.5px;font-weight:800;line-height:1;}
+@media(max-width:640px){.wfh-badge-kind{display:none;}.wfh-name.wfh-badge{padding:1px 2px;text-overflow:clip;}}

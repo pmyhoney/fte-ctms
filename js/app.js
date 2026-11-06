@@ -764,6 +764,7 @@ function renderApp(){
   renderLoadWarning();
   renderTabBar();
   renderTabContent();
+  wfhAlertStart(); // wfhalert.js — 재택 일지 미작성 알림
 }
 function renderLoadWarning(){
   const el = document.getElementById("loadwarning");
@@ -874,6 +875,7 @@ function renderTabBar(){
     items.map(it =>
       '<button class="tab-btn '+((it.id === "fte" ? FTE_SUB_TABS.some(s => s.id === state.tab) : state.tab===it.id)?'active':'')+'" onclick="setTab(\''+it.id+'\')">' +
         icon(it.icon,14) + it.label +
+        (it.id === "wfh" && wfhAlertCount() ? '<span class="tab-count" title="재택 일지 미작성">'+wfhAlertCount()+'</span>' : '') + // wfhalert.js
       '</button>'
     ).join("") +
     '</div>';
@@ -987,7 +989,7 @@ function renderDashboard(){
   const endingSoon = Array.from(endingSoonMap.values()).sort((a,b) => a.endPeriod.localeCompare(b.endPeriod));
   const ctmsDelayedList = ctmsDelayedTasks();
   const ctmsOpenIssues = ctmsOpenIssueCount();
-  const hoAlerts = hoAlertItems(); // links.js — 인수인계 미완료·인계자 배정 겹침
+  const hoAlerts = hoAlertItems().concat(wfhAlertLines()); // links.js — 인수인계 미완료·인계자 배정 겹침, wfhalert.js — 재택 일지 미작성
 
   let html = '<div class="stack">';
 
@@ -1844,6 +1846,7 @@ function renderMembersTab(){
   }else{
     html += state.members.map(m =>
       '<div class="list-row">' +
+        memberColorChipHtml(m) + // wfhalert.js
         '<input class="input" value="'+esc(m.name)+'" onchange="updateMemberName(\''+m.id+'\', this.value)" ' +
         'style="flex:1;min-width:120px;font-size:13.5px;font-weight:600;border-color:transparent;background:transparent;padding:6px 8px;" ' +
         'onfocus="this.style.borderColor=\'var(--border)\';this.style.background=\'#fff\';" ' +
@@ -1852,7 +1855,7 @@ function renderMembersTab(){
         '<input type="checkbox"'+(m.leader?' checked':'')+' onchange="setMemberLeader(\''+m.id+'\', this.checked)"/> 팀장</label>' +
       '<button class="icon-btn" onclick="removeMember(\''+m.id+'\')">'+icon('trash',14)+'</button></div>'
     ).join("");
-    html += '<div style="font-size:11.5px;color:#94A3B8;margin-top:10px;line-height:1.5;">팀장으로 표시하면 과제 배정 대상에서 빠지고, 배정 현황·과제 배정·과제 진행 현황·월별/분기별 화면에 보이지 않아요.</div>';
+    html += '<div style="font-size:11.5px;color:#94A3B8;margin-top:10px;line-height:1.5;">팀장으로 표시하면 과제 배정 대상에서 빠지고, 배정 현황·과제 배정·과제 진행 현황·월별/분기별 화면에 보이지 않아요.<br/>이름 왼쪽 동그라미를 누르면 배지 색을 고를 수 있어요. 재택 달력의 색은 아래 회원 승인의 \'팀원 연결\'을 따르고, 연결이 없으면 같은 이름의 팀원을 찾아요.</div>';
   }
   html += '</div>';
   html += profilesSectionHtml();
@@ -1936,6 +1939,7 @@ async function deleteProfile(id){
 async function updateProfile(id, patch){
   const { error } = await sb.from("profiles").update(patch).eq("id", id);
   if(error){ showToast("회원 정보를 저장하지 못했어요", { error: true }); return false; }
+  wfh.names = null; wfh.profs = null; wfh.loadedYm = null; // 재택 달력의 이름·색 배지를 다시 불러오게
   const p = profilesCache.find(x => x.id === id);
   if(p) Object.assign(p, patch);
   if(currentProfile && currentProfile.id === id) Object.assign(currentProfile, patch);
