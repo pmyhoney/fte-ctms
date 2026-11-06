@@ -212,7 +212,7 @@ body.save-blocked #tabcontent input:not(.view-ok){pointer-events:none;background
   #print-area .pr-title{font-size:17px;font-weight:800;margin-bottom:3px;}
   #print-area .pr-meta{font-size:10.5px;color:#444;margin-bottom:10px;}
   #print-area .pr-group{margin-bottom:12px;}
-  #print-area .pr-group-head{font-size:12px;padding:4px 0;break-after:avoid;page-break-after:avoid;}
+  #print-area th.pr-group-head{font-size:12px;font-weight:400;padding:4px 0;background:#fff;border:none;}
   #print-area .pr-group-head b{font-size:13px;margin-right:4px;}
   #print-area table{width:100%;border-collapse:collapse;table-layout:fixed;}
   #print-area thead{display:table-header-group;}

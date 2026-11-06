@@ -514,8 +514,11 @@ function trainingPrintHtml(list){
     if(s === "none") return "해당없음";
     return TX_LABEL[s] + (s === "plan" ? " (" + (r.tx_plan_date || "") + ")" : s === "done" ? " (" + (r.tx_done_date || "") + ")" : "");
   };
-  const head = (withName) => '<thead><tr>' + (withName ? '<th style="width:9%;">담당자</th>' : '') +
-    '<th style="width:9%;">이수일</th><th>교육명</th><th style="width:13%;">주관</th><th style="width:5%;">시간</th><th style="width:5%;">구분</th><th style="width:6%;">유형</th><th style="width:13%;">전달교육</th><th style="width:18%;">비고</th></tr></thead>';
+  // 표 고정 폭은 첫 행 기준이라, 그룹 제목 행을 thead에 넣으려면 폭을 colgroup으로 지정한다
+  const head = (withName, title) => '<colgroup>' + (withName ? '<col style="width:9%;">' : '') +
+    '<col style="width:9%;"><col><col style="width:13%;"><col style="width:5%;"><col style="width:8%;"><col style="width:6%;"><col style="width:13%;"><col style="width:18%;"></colgroup><thead>' +
+    (title ? '<tr><th colspan="8" class="pr-group-head">' + title + '</th></tr>' : '') +
+    '<tr>' + (withName ? '<th>담당자</th>' : '') + '<th>이수일</th><th>교육명</th><th>주관</th><th>시간</th><th>구분</th><th>유형</th><th>전달교육</th><th>비고</th></tr></thead>';
   const row = (r, withName) => '<tr>' + (withName ? '<td>' + esc(trMemberName(r) || "–") + '</td>' : '') +
     '<td>' + esc(r.edu_date) + '</td><td>' + esc(r.title) + '</td><td>' + esc(r.org) + '</td>' +
     '<td>' + (r.hours != null ? esc(r.hours) + 'h' : '') + '</td><td>' + esc(trScopeLabel(r)) + '</td><td>' + esc(r.edu_type) + '</td>' +
@@ -529,8 +532,7 @@ function trainingPrintHtml(list){
       if(!groups.length || groups[groups.length - 1].name !== name) groups.push({ name, rows: [] });
       groups[groups.length - 1].rows.push(r);
     });
-    body = groups.map(g => '<div class="pr-group"><div class="pr-group-head"><b>' + esc(g.name) + '</b> ' + g.rows.length + '건 · ' + hoursOf(g.rows) + '시간</div>' +
-      '<table>' + head(false) + '<tbody>' + g.rows.map(r => row(r, false)).join("") + '</tbody></table></div>').join("");
+    body = groups.map(g => '<div class="pr-group"><table>' + head(false, '<b>' + esc(g.name) + '</b> ' + g.rows.length + '건 · ' + hoursOf(g.rows) + '시간') + '<tbody>' + g.rows.map(r => row(r, false)).join("") + '</tbody></table></div>').join("");
   }else{
     body = '<table>' + head(true) + '<tbody>' + list.map(r => row(r, true)).join("") + '</tbody></table>';
   }
