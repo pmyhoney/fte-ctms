@@ -472,6 +472,9 @@ function trTx(r){ // 팀내 전달교육 상태 (사외 교육만 해당)
   if(!r.tx_need) return "na";
   return r.tx_status || "todo";
 }
+// 구분 표시: self training은 사내 교육의 하위 구분 (scope는 '사내', self_training만 true)
+const TR_SELF = "self training";
+const trScopeLabel = (r) => r.scope === "사내" && r.self_training ? "사내 · " + TR_SELF : r.scope;
 const trCanEdit = (r) => isSysAdmin() || (canWrite() && r.user_id === currentProfile.id); // DB 정책과 같은 기준
 
 async function trainingLoad(){
@@ -489,7 +492,7 @@ async function trainingLoad(){
 function trainingFiltered(){
   const f = training.f, q = f.q.trim().toLowerCase();
   const list = training.rows.filter(r =>
-    (!f.member || trMemberName(r) === f.member) && (!f.scope || r.scope === f.scope) && (!f.type || r.edu_type === f.type) &&
+    (!f.member || trMemberName(r) === f.member) && (!f.scope || (f.scope === "self" ? r.scope === "사내" && r.self_training : r.scope === f.scope)) && (!f.type || r.edu_type === f.type) &&
     (!f.tx || trTx(r) === f.tx) &&
     (!q || [r.title, r.org, r.note].some(v => (v || "").toLowerCase().includes(q))));
   if(f.sort !== "name") return list; // 기본: 불러온 순서(이수일 최신순)
@@ -515,9 +518,9 @@ function trainingPrintHtml(list){
     '<th style="width:9%;">이수일</th><th>교육명</th><th style="width:13%;">주관</th><th style="width:5%;">시간</th><th style="width:5%;">구분</th><th style="width:6%;">유형</th><th style="width:13%;">전달교육</th><th style="width:18%;">비고</th></tr></thead>';
   const row = (r, withName) => '<tr>' + (withName ? '<td>' + esc(trMemberName(r) || "–") + '</td>' : '') +
     '<td>' + esc(r.edu_date) + '</td><td>' + esc(r.title) + '</td><td>' + esc(r.org) + '</td>' +
-    '<td>' + (r.hours != null ? esc(r.hours) + 'h' : '') + '</td><td>' + esc(r.scope) + '</td><td>' + esc(r.edu_type) + '</td>' +
+    '<td>' + (r.hours != null ? esc(r.hours) + 'h' : '') + '</td><td>' + esc(trScopeLabel(r)) + '</td><td>' + esc(r.edu_type) + '</td>' +
     '<td>' + esc(txText(r)) + '</td><td class="pr-note">' + esc(r.note) + '</td></tr>';
-  const filters = [f.member, f.scope, f.type, f.tx ? "전달교육 " + TX_LABEL[f.tx] : "", f.q.trim() ? '검색 "' + f.q.trim() + '"' : ""].filter(Boolean);
+  const filters = [f.member, f.scope === "self" ? TR_SELF : f.scope, f.type, f.tx ? "전달교육 " + TX_LABEL[f.tx] : "", f.q.trim() ? '검색 "' + f.q.trim() + '"' : ""].filter(Boolean);
   let body;
   if(byName){
     const groups = [];
@@ -581,7 +584,7 @@ function renderTrainingTab(){
       '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">' +
         sel("sort", [["", "정렬: 이수일 최신순"], ["name", "정렬: 담당자 이름순"]]) +
         sel("member", [["", "전체 팀원"]].concat(members.map(n => [n, n]))) +
-        sel("scope", [["", "사내·사외 전체"], ["사내", "사내"], ["사외", "사외"]]) +
+        sel("scope", [["", "사내·사외 전체"], ["사내", "사내"], ["self", "\u00A0\u00A0└ " + TR_SELF], ["사외", "사외"]]) +
         sel("type", [["", "유형 전체"], ["과제", "과제"], ["SOP", "SOP"], ["General", "General"]]) +
         sel("tx", [["", "전달교육 전체"], ["todo", "미계획"], ["plan", "계획"], ["done", "완료"], ["na", "전달 불필요"]]) +
         '<input class="input view-ok" style="flex:1 1 180px;width:auto;" type="search" placeholder="교육명·주관·비고 검색" value="' + esc(f.q) + '" oninput="training.f.q=this.value;trainingRenderList()"/>' +
@@ -699,7 +702,7 @@ function trainingListHtml(){
       '<td>' + esc(r.edu_date) + '</td>' +
       '<td style="white-space:normal;min-width:180px;text-align:left;"><div style="font-weight:700;">' + esc(r.title) + '</div>' + (r.org ? '<div style="font-size:11.5px;color:#94A3B8;">' + esc(r.org) + '</div>' : '') + '</td>' +
       '<td>' + (r.hours != null ? esc(r.hours) + 'h' : '') + '</td>' +
-      '<td><span class="tr-chip ' + (r.scope === "사외" ? 'out' : 'in') + '">' + esc(r.scope) + '</span></td>' +
+      '<td><span class="tr-chip ' + (r.scope === "사외" ? 'out' : 'in') + '">' + esc(trScopeLabel(r)) + '</span></td>' +
       '<td>' + esc(r.edu_type) + '</td>' +
       '<td>' + txCell(r) + '</td>' +
       '<td style="white-space:normal;min-width:120px;text-align:left;font-size:12px;">' + esc(r.note) + '</td>' +
@@ -739,7 +742,8 @@ function trainingEditOpen(id){
       '<div class="wk-form" style="grid-template-columns:repeat(4,minmax(0,1fr));">' +
         field("주관 (부서·기관)", input("org", "text", "예: QA팀 / KoNECT", "")) +
         field("교육 시간 (h)", input("hours", "number", "", "")) +
-        field("구분 *", select("scope", [["사내", "사내"], ["사외", "사외"]], "사내")) +
+        field("구분 *", '<select id="tre-scope" class="input" onchange="trainingSync()">' +
+          [["사내", "사내"], ["self", "\u00A0\u00A0└ " + TR_SELF], ["사외", "사외"]].map(o => '<option value="' + o[0] + '"' + ((r ? (r.scope === "사내" && r.self_training ? "self" : r.scope) : "사내") === o[0] ? ' selected' : '') + '>' + o[1] + '</option>').join("") + '</select>') +
         field("교육 유형 *", select("edu_type", [["", "선택"], ["과제", "과제"], ["SOP", "SOP"], ["General", "General"]], "")) +
       '</div>' +
       '<div id="tre-txbox" style="border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:12px;background:#F8FAFC;">' +
@@ -775,10 +779,10 @@ function trainingSync(){
 async function trainingSave(id){
   const val = (k) => document.getElementById("tre-" + k).value.trim();
   const hours = val("hours");
-  const memberId = val("member_id"), prevRow = id ? training.rows.find(x => x.id === id) : null;
+  const memberId = val("member_id"), prevRow = id ? training.rows.find(x => x.id === id) : null, scopeVal = val("scope");
   const rec = {
     member: memberId ? lkMemberName(memberId) : (prevRow ? prevRow.member : ""), member_id: memberId || null, edu_date: val("edu_date"), title: val("title"), org: val("org"),
-    hours: hours === "" ? null : Number(hours), scope: val("scope"), edu_type: val("edu_type"), note: val("note"),
+    hours: hours === "" ? null : Number(hours), scope: scopeVal === "self" ? "사내" : scopeVal, self_training: scopeVal === "self", edu_type: val("edu_type"), note: val("note"),
     tx_need: false, tx_status: null, tx_plan_date: null, tx_done_date: null, updated_at: new Date().toISOString(),
   };
   const miss = [];
@@ -847,7 +851,7 @@ async function trainingExport(){
 function trainingExportRow(r){
   return {
     "팀원": trMemberName(r), "이수일": r.edu_date, "교육명": r.title, "주관": r.org, "시간(h)": r.hours,
-    "구분": r.scope, "유형": r.edu_type, "전달교육": r.scope === "사외" ? TX_LABEL[trTx(r)] : "해당없음",
+    "구분": trScopeLabel(r), "유형": r.edu_type, "전달교육": r.scope === "사외" ? TX_LABEL[trTx(r)] : "해당없음",
     "전달 계획일": r.tx_plan_date || "", "전달 실시일": r.tx_done_date || "", "비고": r.note,
   };
 }

@@ -18,7 +18,7 @@ const HIST_OPS = {
 const HIST_FIELD = {
   day: "날짜", journal: "업무 일지", kind: "구분", visit_date: "방문일", task_name: "과제명", visit_place: "방문처", region: "지역",
   pi_name: "PI명", reason: "방문사유", visitor: "방문자", member: "팀원", edu_date: "이수일", title: "제목", org: "주관",
-  hours: "시간", scope: "사내/사외", edu_type: "교육 유형", tx_need: "전달교육 대상", tx_status: "전달교육 상태",
+  hours: "시간", scope: "사내/사외", self_training: "self training", edu_type: "교육 유형", tx_need: "전달교육 대상", tx_status: "전달교육 상태",
   tx_plan_date: "전달교육 계획일", tx_done_date: "전달교육 완료일", note: "비고", session_date: "교육일", educator: "교육자",
   attendees: "참석자", name: "이름", description: "설명", login_id: "아이디", role: "권한", approved: "승인",
   member_id: "연결 팀원", kol_editor: "KOL 편집", hidden: "목록에서 뺌", group_id: "배정 과제",
