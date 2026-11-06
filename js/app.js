@@ -989,7 +989,7 @@ function renderDashboard(){
   const endingSoon = Array.from(endingSoonMap.values()).sort((a,b) => a.endPeriod.localeCompare(b.endPeriod));
   const ctmsDelayedList = ctmsDelayedTasks();
   const ctmsOpenIssues = ctmsOpenIssueCount();
-  const hoAlerts = hoAlertItems().concat(wfhAlertLines()); // links.js — 인수인계 미완료·인계자 배정 겹침, wfhalert.js — 재택 일지 미작성
+  const hoAlerts = hoAlertItems().concat(noticeLines()); // links.js — 인수인계 미완료·인계자 배정 겹침, notice.js — 입력 누락 알림 다시 보기
 
   let html = '<div class="stack">';
 
@@ -3041,7 +3041,7 @@ function ctmsMilestoneRowsHtml(g){
     else if(m.plan && m.plan < now) badge = '<span style="font-size:10.5px;font-weight:800;color:#B91C1C;">지연</span>';
     else if(m.plan) badge = '<span style="font-size:10.5px;font-weight:700;color:#94A3B8;">예정</span>';
     else badge = '<span style="font-size:10.5px;color:#CBD5E1;">–</span>';
-    return '<div style="display:flex;align-items:flex-start;gap:6px;flex-wrap:wrap;padding:6px 8px;background:#fff;border-radius:7px;margin-bottom:5px;">' +
+    return '<div id="ms-row-'+esc(gid)+'-'+esc(st.key)+'" style="display:flex;align-items:flex-start;gap:6px;flex-wrap:wrap;padding:6px 8px;background:#fff;border-radius:7px;margin-bottom:5px;">' + // notice.js 바로 가기 대상
       '<input class="input" value="'+esc(st.label)+'" onchange="ctmsRenameStage(\''+gid+'\',\''+st.key+'\',this.value)" title="이름 수정" style="flex:1 1 130px;min-width:0;align-self:center;font-size:13px;font-weight:600;padding:5px 6px;border-color:transparent;background:transparent;" onfocus="this.style.borderColor=\'var(--border)\';this.style.background=\'#fff\';" onblur="this.style.borderColor=\'transparent\';this.style.background=\'transparent\';"/>' +
       ctmsLabeled("계획", ctmsPlanCellHtml(gid, st, m), "1 1 150px") +
       ctmsLabeled("실적", '<input type="month" class="input" value="'+(m.actual || "")+'" onchange="ctmsSetMilestone(\''+gid+'\',\''+st.key+'\',\'actual\',this.value)" style="font-size:12px;padding:5px 6px;"/>', "1 1 110px") +

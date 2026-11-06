@@ -191,3 +191,14 @@ body.save-blocked #tabcontent input:not(.view-ok){pointer-events:none;background
 .wfh-legend-name{display:inline-block;padding:1px 7px;border-radius:4px;font-size:11.5px;font-weight:700;white-space:nowrap;}
 .tab-count{display:inline-flex;align-items:center;justify-content:center;min-width:17px;height:17px;padding:0 4px;border-radius:999px;background:var(--danger);color:#fff;font-size:10.5px;font-weight:800;line-height:1;}
 @media(max-width:640px){.wfh-badge-kind{display:none;}.wfh-name.wfh-badge{padding:1px 2px;text-overflow:clip;}}
+/* 입력 누락 알림 팝업 (notice.js) */
+.notice-list{max-height:min(420px,calc(100vh - 260px));overflow-y:auto;margin-top:4px;}
+.notice-sec{font-size:12.5px;font-weight:800;color:#475569;margin:12px 0 4px;}
+.notice-sec b{color:var(--danger);}
+.notice-row{gap:10px;}
+.notice-text{min-width:0;flex:1;}
+.notice-title{font-size:13px;font-weight:700;line-height:1.4;overflow-wrap:anywhere;}
+.notice-sub{font-size:11.5px;color:#64748B;line-height:1.4;margin-top:2px;overflow-wrap:anywhere;}
+.notice-go{flex:0 0 auto;padding:5px 11px;font-size:12px;white-space:nowrap;}
+@keyframes notice-flash{0%,100%{background:#fff;}50%{background:#FEE2E2;}}
+.notice-flash{outline:2px solid #DC2626;animation:notice-flash .8s ease-in-out 3;}

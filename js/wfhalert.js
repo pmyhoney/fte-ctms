@@ -2,7 +2,8 @@
    - 팀원 색: state.members[].color (app_state에 함께 저장, 팀원 관리 탭에서 관리자가 지정)
    - 달력 배지: 회원(profiles.member_id)에 연결된 팀원의 색. 연결이 없으면 같은 이름의 팀원을 찾는다.
    - 알림: 재택일 오후 6시(한국 시간)까지 일지가 없으면 본인에게, 팀장·관리자에게는 전체 팀원 것을 띄운다.
-     서버 발송이 아니라 앱 안의 팝업이다 — 앱을 열어 둔 사람은 6시에, 아니면 다음 접속 때 본다. */
+     서버 발송이 아니라 앱 안의 팝업이다 — 앱을 열어 둔 사람은 6시에, 아니면 다음 접속 때 본다.
+     팝업 화면은 다른 입력 누락과 함께 notice.js에서 그린다. */
 
 const MEMBER_COLORS = ["#E53935", "#FB8C00", "#F9A825", "#7CB342", "#2E7D32", "#00897B", "#00ACC1", "#1E88E5", "#3949AB", "#8E24AA", "#D81B60", "#6D4C41"];
 const WFH_DEADLINE_HOUR = 18;
@@ -109,20 +110,7 @@ function wfhLegendHtml(){
 }
 
 /* --- 일지 미작성 알림 --- */
-const wfhAlert = { items: [], timer: null, fetched: 0, marker: "", seq: 0, seen: null, onVisible: null };
-
-function wfhAlertSeenKey(){ return "wfh-alert-seen:" + currentProfile.id; }
-function wfhAlertSeen(){
-  if(wfhAlert.seen) return wfhAlert.seen;
-  let saved = [];
-  try{ saved = JSON.parse(sessionStorage.getItem(wfhAlertSeenKey()) || "[]"); }catch(e){ /* 없으면 처음부터 */ }
-  return wfhAlert.seen = new Set(saved);
-}
-function wfhAlertMarkSeen(){
-  const seen = wfhAlertSeen();
-  wfhAlert.items.forEach(x => seen.add(x.id));
-  try{ sessionStorage.setItem(wfhAlertSeenKey(), JSON.stringify(Array.from(seen))); }catch(e){ /* 저장 못 해도 이번 화면에서는 기억 */ }
-}
+const wfhAlert = { items: [], timer: null, fetched: 0, marker: "", seq: 0, onVisible: null };
 
 // 미작성 목록을 새로 계산한다. 다른 화면을 건드리지 않도록 팝업은 wfhAlertTick에서만 띄운다.
 async function wfhAlertRefresh(){
@@ -151,42 +139,8 @@ async function wfhAlertRefresh(){
 async function wfhAlertTick(){
   if(!currentProfile || !canWrite() || document.hidden) return;
   const k = wfhKst(), marker = k.day + (k.hour >= WFH_DEADLINE_HOUR ? "PM" : "AM");
-  if(marker !== wfhAlert.marker || Date.now() - wfhAlert.fetched >= WFH_ALERT_REFETCH_MS) await wfhAlertRefresh();
-  wfhAlertPopupIfNew();
-}
-// 새 미작성 건이 있을 때만 띄운다. 입력 중인 팝업이나 칸을 가리지 않도록 다음 확인으로 미룬다.
-function wfhAlertPopupIfNew(){
-  if(!currentProfile || !wfhAlert.items.length) return;
-  const seen = wfhAlertSeen();
-  if(wfhAlert.items.every(x => seen.has(x.id))) return;
-  if(document.getElementById("modal-overlay")) return;
-  const a = document.activeElement, tag = a && a.tagName;
-  if(tag === "TEXTAREA" || tag === "SELECT" || tag === "INPUT") return;
-  wfhAlertShow();
-}
-function wfhAlertShow(){
-  const items = wfhAlert.items;
-  if(!items.length){ showToast("작성하지 않은 재택 일지가 없어요"); return; }
-  wfhAlertMarkSeen();
-  const dows = ["일", "월", "화", "수", "목", "금", "토"];
-  const dayText = (x) => x.day + ' (' + dows[new Date(x.day + "T00:00:00").getDay()] + ') · ' + WFH_KIND[x.kind];
-  const mine = items.filter(x => x.mine), others = items.filter(x => !x.mine);
-  const rowBtn = (label, on) => '<button class="add-btn" style="padding:5px 11px;font-size:12px;flex:0 0 auto;" onclick="' + on + '">' + label + '</button>';
-  const section = (title, html) => '<div style="font-size:12.5px;font-weight:800;color:#475569;margin:10px 0 2px;">' + title + '</div>' + html;
-  showModal(
-    '<div style="display:flex;align-items:center;gap:7px;color:var(--danger);margin-bottom:6px;">' + icon('alert', 16) +
-      '<span style="font-weight:800;font-size:14px;">재택 업무 일지 미작성 ' + items.length + '건</span></div>' +
-    '<div style="font-size:12.5px;color:#475569;line-height:1.6;">재택일 업무 종료 시간(오후 6시)까지 업무 일지가 작성되지 않았어요.</div>' +
-    '<div style="max-height:340px;overflow-y:auto;">' +
-      (mine.length ? section("내 일지", mine.map(x =>
-        '<div class="list-row"><span style="font-size:13px;font-weight:700;">' + dayText(x) + '</span>' + rowBtn("일지 쓰기", "wfhAlertWrite('" + x.day + "')") + '</div>').join("")) : '') +
-      (others.length ? section("팀원 일지", others.map(x =>
-        '<div class="list-row"><span style="display:flex;align-items:center;flex-wrap:wrap;gap:7px;min-width:0;font-size:13px;font-weight:700;">' +
-          '<span class="wfh-legend-name" style="' + colorBadgeStyle(wfhColorOfUser(x.userId)) + '">' + esc(x.name) + '</span>' + dayText(x) + '</span>' +
-          rowBtn("보기", "wfhAlertView('" + x.day + "','" + x.id + "')") + '</div>').join("")) : '') +
-    '</div>' +
-    '<button class="add-btn" style="width:100%;justify-content:center;margin-top:12px;background:#fff;color:#475569;border:1px solid var(--border);" onclick="closeModal()">확인</button>'
-  );
+  if(marker !== wfhAlert.marker || Date.now() - wfhAlert.fetched >= WFH_ALERT_REFETCH_MS) await Promise.all([wfhAlertRefresh(), noticeTxRefresh()]);
+  noticePopupIfNew(); // notice.js
 }
 // 알림에서 해당 달의 달력으로 옮겨 간 뒤 일지를 연다
 async function wfhAlertGoMonth(day){
@@ -207,14 +161,6 @@ async function wfhAlertView(day, id){
   const i = (wfh.others[day] || []).findIndex(o => o.id === id);
   if(i >= 0) wfhOtherOpen(day, i); else showToast("이미 삭제된 재택 일정이에요", { error: true });
 }
-// 배정 현황 '확인이 필요해요'에 넣을 문장
-function wfhAlertLines(){
-  const items = wfhAlert.items;
-  if(!items.length) return [];
-  const short = (x) => (x.mine ? '내 일지' : esc(x.name)) + ' ' + x.day.slice(5).replace("-", "/");
-  return ['재택 업무 일지 미작성 <b style="color:var(--danger);">' + items.length + '건</b> — ' + items.map(short).join(', ') +
-    ' <button class="p360-btn view-ok" onclick="wfhAlertShow()">확인</button>'];
-}
 function wfhAlertCount(){ return wfhAlert.items.length; }
 // 데이터를 다 불러온 뒤(renderApp) 시작 — 1분마다 확인하고, 잠자기·다른 탭에서 돌아오면 바로 확인한다
 function wfhAlertStart(){
@@ -227,6 +173,6 @@ function wfhAlertStart(){
 function wfhAlertReset(){
   if(wfhAlert.timer) clearInterval(wfhAlert.timer);
   if(wfhAlert.onVisible) document.removeEventListener("visibilitychange", wfhAlert.onVisible);
-  try{ if(currentProfile) sessionStorage.removeItem(wfhAlertSeenKey()); }catch(e){ /* 무시 */ }
-  Object.assign(wfhAlert, { items: [], timer: null, fetched: 0, marker: "", seq: wfhAlert.seq + 1, seen: null, onVisible: null });
+  noticeReset(); // notice.js
+  Object.assign(wfhAlert, { items: [], timer: null, fetched: 0, marker: "", seq: wfhAlert.seq + 1, onVisible: null });
 }

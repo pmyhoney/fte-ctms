@@ -91,7 +91,7 @@ function renderWfhTab(){
       '<button class="icon-round view-ok" onclick="wfhMove(1)">' + icon('chevronRight', 15) + '</button>' +
     '</div>' +
     '<div style="display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-bottom:10px;">' +
-      (wfhAlertCount() ? '<button class="add-btn view-ok" style="background:var(--danger);" onclick="wfhAlertShow()">' + icon('alert', 14) + ' 일지 미작성 ' + wfhAlertCount() + '건</button>' : '') +
+      (wfhAlertCount() ? '<button class="add-btn view-ok" style="background:var(--danger);" onclick="noticeShow(\'wfh\')">' + icon('alert', 14) + ' 일지 미작성 ' + wfhAlertCount() + '건</button>' : '') +
       '<button class="btn-export view-ok" onclick="wfhExport()">' + icon('download', 14) + ' ' + periodLabel(wfh.ym) + ' 재택·일지 엑셀</button>' +
     '</div>' +
     (isAdmin() ? wfhLegendHtml() : '') +
@@ -749,6 +749,7 @@ async function trainingSave(id){
   if(!data || data.length === 0){ showToast("이 기록을 수정할 권한이 없어요", { error: true }); return; }
   closeModal();
   showToast(id ? "교육 이력을 수정했어요" : "교육 이력을 등록했어요");
+  noticeTxRefresh(); // notice.js
   training.rows = null; // 이수일 순서대로 다시 불러온다
   renderTabContent();
 }
@@ -770,6 +771,7 @@ async function trainingDelete(id){
   closeModal();
   if(error){ showToast("삭제하지 못했어요: " + error.message, { error: true }); return; }
   if(!data || data.length === 0){ showToast("이 기록을 삭제할 권한이 없어요", { error: true }); return; }
+  noticeTxRefresh(); // notice.js
   training.rows = training.rows.filter(r => r.id !== id);
   training.sessions = training.sessions.filter(s => s.training_id !== id); // DB에서도 연동 기록이 함께 지워진다
   showToast("삭제했어요");
