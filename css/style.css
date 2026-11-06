@@ -202,3 +202,23 @@ body.save-blocked #tabcontent input:not(.view-ok){pointer-events:none;background
 .notice-go{flex:0 0 auto;padding:5px 11px;font-size:12px;white-space:nowrap;}
 @keyframes notice-flash{0%,100%{background:#fff;}50%{background:#FEE2E2;}}
 .notice-flash{outline:2px solid #DC2626;animation:notice-flash .8s ease-in-out 3;}
+/* 교육 이력 인쇄 (worklog.js trainingPrint) — 화면에는 보이지 않고, 인쇄할 때 이 부분만 나온다 */
+#print-area{display:none;}
+@media print{
+  @page{size:A4 landscape;margin:12mm;}
+  html,body{background:#fff !important;height:auto !important;overflow:visible !important;}
+  body > *:not(#print-area){display:none !important;}
+  #print-area{display:block;color:#000;font-size:10.5px;line-height:1.4;}
+  #print-area .pr-title{font-size:17px;font-weight:800;margin-bottom:3px;}
+  #print-area .pr-meta{font-size:10.5px;color:#444;margin-bottom:10px;}
+  #print-area .pr-group{margin-bottom:12px;}
+  #print-area .pr-group-head{font-size:12px;padding:4px 0;break-after:avoid;page-break-after:avoid;}
+  #print-area .pr-group-head b{font-size:13px;margin-right:4px;}
+  #print-area table{width:100%;border-collapse:collapse;table-layout:fixed;}
+  #print-area thead{display:table-header-group;}
+  #print-area tr{break-inside:avoid;page-break-inside:avoid;}
+  #print-area th,#print-area td{border:1px solid #999;padding:3px 5px;text-align:left;vertical-align:top;white-space:normal;overflow-wrap:anywhere;}
+  #print-area th,#print-area td{font-size:10.5px;color:#000;}
+  #print-area th{background:#eee;font-weight:700;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  #print-area .pr-note{white-space:pre-wrap;}
+}

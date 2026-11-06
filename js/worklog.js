@@ -488,10 +488,65 @@ async function trainingLoad(){
 
 function trainingFiltered(){
   const f = training.f, q = f.q.trim().toLowerCase();
-  return training.rows.filter(r =>
+  const list = training.rows.filter(r =>
     (!f.member || trMemberName(r) === f.member) && (!f.scope || r.scope === f.scope) && (!f.type || r.edu_type === f.type) &&
     (!f.tx || trTx(r) === f.tx) &&
     (!q || [r.title, r.org, r.note].some(v => (v || "").toLowerCase().includes(q))));
+  if(f.sort !== "name") return list; // 기본: 불러온 순서(이수일 최신순)
+  // 담당자 이름순. 같은 담당자 안에서는 이수일 최신순을 유지하고, 이름이 없는 기록은 맨 뒤로
+  return list.slice().sort((a, b) => {
+    const x = trMemberName(a), y = trMemberName(b);
+    if(!x || !y) return x ? -1 : y ? 1 : 0;
+    return x.localeCompare(y, "ko");
+  });
+}
+
+/* 지금 필터·정렬로 보이는 교육 이력을 인쇄한다. 담당자 이름순이면 담당자별로 묶고 소계를 붙인다.
+   화면에는 보이지 않는 #print-area를 만들어 window.print()로 그 부분만 찍는다 (css/style.css @media print) */
+function trainingPrintHtml(list){
+  const f = training.f, byName = f.sort === "name";
+  const hoursOf = (rows) => rows.reduce((n, r) => n + (Number(r.hours) || 0), 0);
+  const txText = (r) => {
+    const s = trTx(r);
+    if(s === "none") return "해당없음";
+    return TX_LABEL[s] + (s === "plan" ? " (" + (r.tx_plan_date || "") + ")" : s === "done" ? " (" + (r.tx_done_date || "") + ")" : "");
+  };
+  const head = (withName) => '<thead><tr>' + (withName ? '<th style="width:9%;">담당자</th>' : '') +
+    '<th style="width:9%;">이수일</th><th>교육명</th><th style="width:13%;">주관</th><th style="width:5%;">시간</th><th style="width:5%;">구분</th><th style="width:6%;">유형</th><th style="width:13%;">전달교육</th><th style="width:18%;">비고</th></tr></thead>';
+  const row = (r, withName) => '<tr>' + (withName ? '<td>' + esc(trMemberName(r) || "–") + '</td>' : '') +
+    '<td>' + esc(r.edu_date) + '</td><td>' + esc(r.title) + '</td><td>' + esc(r.org) + '</td>' +
+    '<td>' + (r.hours != null ? esc(r.hours) + 'h' : '') + '</td><td>' + esc(r.scope) + '</td><td>' + esc(r.edu_type) + '</td>' +
+    '<td>' + esc(txText(r)) + '</td><td class="pr-note">' + esc(r.note) + '</td></tr>';
+  const filters = [f.member, f.scope, f.type, f.tx ? "전달교육 " + TX_LABEL[f.tx] : "", f.q.trim() ? '검색 "' + f.q.trim() + '"' : ""].filter(Boolean);
+  let body;
+  if(byName){
+    const groups = [];
+    list.forEach(r => {
+      const name = trMemberName(r) || "담당자 없음";
+      if(!groups.length || groups[groups.length - 1].name !== name) groups.push({ name, rows: [] });
+      groups[groups.length - 1].rows.push(r);
+    });
+    body = groups.map(g => '<div class="pr-group"><div class="pr-group-head"><b>' + esc(g.name) + '</b> ' + g.rows.length + '건 · ' + hoursOf(g.rows) + '시간</div>' +
+      '<table>' + head(false) + '<tbody>' + g.rows.map(r => row(r, false)).join("") + '</tbody></table></div>').join("");
+  }else{
+    body = '<table>' + head(true) + '<tbody>' + list.map(r => row(r, true)).join("") + '</tbody></table>';
+  }
+  return '<div class="pr-title">교육 이력</div>' +
+    '<div class="pr-meta">출력일 ' + todayYmd() + ' · 총 ' + list.length + '건 · ' + hoursOf(list) + '시간 · ' + (byName ? '담당자 이름순' : '이수일 최신순') +
+      (filters.length ? ' · 조건: ' + esc(filters.join(", ")) : '') + '</div>' + body;
+}
+function trainingPrint(){
+  const list = trainingFiltered();
+  if(list.length === 0){ showToast("출력할 이력이 없어요", { error: true }); return; }
+  const old = document.getElementById("print-area");
+  if(old) old.remove();
+  const el = document.createElement("div");
+  el.id = "print-area";
+  el.innerHTML = trainingPrintHtml(list);
+  document.body.appendChild(el);
+  const done = () => { el.remove(); window.removeEventListener("afterprint", done); };
+  window.addEventListener("afterprint", done);
+  window.print();
 }
 
 function renderTrainingTab(){
@@ -518,11 +573,13 @@ function renderTrainingTab(){
       '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px;">' +
         '<div style="font-weight:800;font-size:14px;">교육 이력 <span id="tr-count" style="font-size:12px;color:#94A3B8;font-weight:600;">' + trainingFiltered().length + '건 표시</span></div>' +
         '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
+          '<button class="btn-export view-ok" onclick="trainingPrint()">' + icon('list', 14) + ' 인쇄·PDF 출력</button>' +
           '<button class="btn-export view-ok" onclick="trainingExport()">' + icon('download', 14) + ' 엑셀 다운로드</button>' +
           (canWrite() ? '<button class="add-btn view-ok" onclick="trainingEditOpen(null)">' + icon('plus', 13) + ' 교육 이력 등록</button>' : '') +
         '</div>' +
       '</div>' +
       '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">' +
+        sel("sort", [["", "정렬: 이수일 최신순"], ["name", "정렬: 담당자 이름순"]]) +
         sel("member", [["", "전체 팀원"]].concat(members.map(n => [n, n]))) +
         sel("scope", [["", "사내·사외 전체"], ["사내", "사내"], ["사외", "사외"]]) +
         sel("type", [["", "유형 전체"], ["과제", "과제"], ["SOP", "SOP"], ["General", "General"]]) +
