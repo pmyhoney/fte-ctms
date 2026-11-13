@@ -107,6 +107,8 @@ function icon(name, size){
     trash: '<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>',
     chevronLeft: '<polyline points="15 18 9 12 15 6"/>',
     chevronRight: '<polyline points="9 18 15 12 9 6"/>',
+    chevronUp: '<polyline points="18 15 12 9 6 15"/>',
+    chevronDown: '<polyline points="6 9 12 15 18 9"/>',
     download: '<path d="M12 3v12"/><polyline points="7 10 12 15 17 10"/><path d="M5 21h14"/>',
     alert: '<path d="M12 2 L2 20 H22 Z"/><line x1="12" y1="9" x2="12" y2="13"/><circle cx="12" cy="16.7" r="0.6" fill="currentColor"/>',
     calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><line x1="16" y1="3" x2="16" y2="7"/><line x1="8" y1="3" x2="8" y2="7"/><line x1="3" y1="10" x2="21" y2="10"/>',

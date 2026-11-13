@@ -82,6 +82,12 @@ function ctmsSitesRender(){
     (c.active ? ' <span style="color:#94A3B8;">(진행 ' + cnt("진행") + ' · 종료 ' + cnt("종료") + ')</span>' : '') +
     ["준비", "Drop"].map(st => cnt(st) ? ' · ' + st + ' ' + cnt(st) : '').join("");
   if(!d.rows.length){ box.innerHTML = '<div class="empty" style="padding:18px;">입력된 기관이 없어요.</div>'; return; }
+  // 순서 이동 버튼 (맨 위·맨 아래에서는 비활성)
+  const mv = (i, dir, ic, title) => {
+    const off = i + dir < 0 || i + dir >= d.rows.length;
+    return '<button class="icon-btn" title="' + title + '" style="width:24px;height:18px;padding:0;color:' + (off ? '#CBD5E1;cursor:default;' : '#334155;') + '"' +
+      (off ? ' disabled' : ' onclick="ctmsSiteMove(' + i + ',' + dir + ')"') + '>' + icon(ic, 16) + '</button>';
+  };
   box.innerHTML = d.rows.map((r, i) => {
     const k = lkKolMatch(r.pi, r.name, r.kolId); // links.js
     return '<div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;padding:8px 10px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;background:' + (r.status === "Drop" ? '#F8FAFC' : '#fff') + ';">' +
@@ -93,12 +99,23 @@ function ctmsSitesRender(){
         CTMS_SITE_STATUS.map(s => '<label style="display:flex;align-items:center;gap:4px;font-size:12.5px;font-weight:700;color:' + CTMS_SITE_META[s].c + ';cursor:pointer;">' +
           '<input type="checkbox"' + (r.status === s ? ' checked' : '') + ' onchange="ctmsSiteStatus(' + i + ',\'' + s + '\',this.checked)"' + dis + '/> ' + s + '</label>').join("") +
       '</div>' +
+      (d.edit && d.rows.length > 1 ? '<div style="flex:0 0 auto;display:flex;flex-direction:column;gap:2px;padding-bottom:4px;">' +
+        mv(i, -1, 'chevronUp', '위로 이동') + mv(i, 1, 'chevronDown', '아래로 이동') + '</div>' : '') +
       (d.edit ? '<button class="icon-btn" title="이 기관 삭제" style="padding-bottom:9px;" onclick="ctmsSiteRemove(' + i + ')">' + icon('trash', 14) + '</button>' : '') +
     '</div>';
   }).join("");
 }
 function ctmsSiteAdd(){ ctmsSitesCollect(); ctmsSiteDraft.rows.push(ctmsSiteBlank()); ctmsSitesRender(); const el = document.getElementById("cs-" + (ctmsSiteDraft.rows.length - 1) + "-name"); if(el && el.focus) el.focus(); }
 function ctmsSiteRemove(i){ ctmsSitesCollect(); ctmsSiteDraft.rows.splice(i, 1); ctmsSitesRender(); }
+// 기관 순서 바꾸기 (입력 중인 값은 먼저 모아 두고 옮긴다). 저장해야 반영된다.
+function ctmsSiteMove(i, dir){
+  const d = ctmsSiteDraft; if(!d || !d.edit) return;
+  const j = i + dir;
+  if(j < 0 || j >= d.rows.length) return;
+  ctmsSitesCollect();
+  const t = d.rows[i]; d.rows[i] = d.rows[j]; d.rows[j] = t;
+  ctmsSitesRender();
+}
 // 상태는 한 기관에 하나만 (다른 칸을 체크하면 이전 체크는 풀린다)
 function ctmsSiteStatus(i, st, on){
   ctmsSitesCollect();
