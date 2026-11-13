@@ -50,7 +50,15 @@ function ctmsSitesOpen(gid){
   showModal(
     '<div style="font-weight:800;font-size:14px;margin-bottom:4px;">참여 기관 (Site)</div>' +
     '<div style="font-size:12.5px;color:#94A3B8;margin-bottom:10px;">' + esc(ctmsGroupName(gid)) + '</div>' +
-    '<div id="cs-sum" style="font-size:12.5px;color:#475569;margin-bottom:10px;"></div>' +
+    '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:10px;">' +
+      '<div id="cs-sum" style="font-size:12.5px;color:#475569;"></div>' +
+      '<div style="display:flex;gap:6px;">' +
+        '<button class="add-btn view-ok" style="padding:5px 10px;font-size:12px;background:#fff;color:#475569;border:1px solid var(--border);" title="지금 목록을 엑셀로 받아요 (빈 목록이면 양식)" onclick="ctmsSitesExport()">' + icon('download', 12) + ' 엑셀 내보내기</button>' +
+        (edit ? '<button class="add-btn" style="padding:5px 10px;font-size:12px;background:#fff;color:var(--accent);border:1px solid var(--accent);" title="엑셀의 기관명·PI명·상태 열을 읽어요" onclick="document.getElementById(\'cs-file\').click()">' + icon('upload', 12) + ' 엑셀 가져오기</button>' +
+          '<input type="file" id="cs-file" accept=".xlsx,.xls,.csv" style="display:none;" onchange="ctmsSitesImportFile(this)"/>' : '') +
+      '</div>' +
+    '</div>' +
+    '<div id="cs-import"></div>' +
     '<div class="modal-scroll"><div id="cs-rows"></div>' +
       (edit ? '<button class="add-btn" style="width:100%;justify-content:center;background:#fff;color:var(--accent);border:1px dashed var(--accent);margin-top:4px;" onclick="ctmsSiteAdd()">' + icon('plus', 13) + ' 기관 추가</button>' : '') +
       '<div style="font-size:11.5px;color:#94A3B8;margin-top:8px;line-height:1.6;">전체 기관 수는 Drop을 뺀 기관 수, 개시 기관 수는 \'진행\'·\'종료\' 기관 수(개시했다가 끝난 기관 포함)로 카드에 반영돼요.' +
@@ -157,6 +165,103 @@ function ctmsSitesSave(){
   closeModal();
   showToast("기관 정보를 저장했어요");
   renderTabContent();
+}
+
+/* --- 기관 팝업의 엑셀 내보내기·가져오기 ---
+   내보내기: 팝업에 보이는 목록(저장 전 수정 포함)을 순서대로. 빈 목록이면 열 이름만 있는 양식.
+   가져오기: 첫 시트의 기관명·PI명·상태 열을 읽어 목록을 바꾸거나 뒤에 붙인다. 저장을 눌러야 반영된다. */
+const CTMS_SITE_COLS = [["No.", "no"], ["기관명", "name"], ["PI명", "pi"], ["상태", "status"]];
+const ctmsSiteColKey = (h) => {
+  const s = String(h || "").replace(/\s/g, "").toLowerCase();
+  if(["기관명", "기관", "site", "sitename", "실시기관", "임상시험실시기관"].includes(s)) return "name";
+  if(["pi명", "pi", "책임자", "시험책임자", "연구책임자"].includes(s)) return "pi";
+  if(["상태", "status"].includes(s)) return "status";
+  return null;
+};
+const ctmsSiteKey = (r) => (r.name || "").replace(/\s/g, "") + "|" + (r.pi || "").replace(/\s/g, "");
+async function ctmsSitesExport(){
+  const d = ctmsSiteDraft; if(!d) return;
+  ctmsSitesCollect();
+  const rows = d.rows.filter(r => r.name || r.pi);
+  const ws = XLSX.utils.aoa_to_sheet([CTMS_SITE_COLS.map(c => c[0])].concat(rows.map((r, i) => [i + 1, r.name, r.pi || "", r.status || ""])));
+  ws["!cols"] = [{ wch: 5 }, { wch: 28 }, { wch: 14 }, { wch: 8 }];
+  const guide = XLSX.utils.aoa_to_sheet([
+    ["항목", "작성 방법"],
+    ["No.", "참고용. 가져올 때는 행 순서대로 들어가요 (순서를 바꾸려면 행을 옮겨 주세요)."],
+    ["기관명", "필수. 비어 있는 행은 건너뛰어요."],
+    ["PI명", "선택. KOL 명단에 있으면 저장할 때 자동으로 연결돼요."],
+    ["상태", "준비 / 진행 / 종료 / Drop 중 하나. 비워 두거나 다른 값이면 상태 없이 들어가요."],
+  ]);
+  guide["!cols"] = [{ wch: 10 }, { wch: 80 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "참여 기관");
+  XLSX.utils.book_append_sheet(wb, guide, "작성 안내");
+  const name = (ctmsGroupName(d.gid) || "과제").replace(/[\\/:*?"<>|]/g, "_");
+  await saveFileToViewer("참여기관_" + name + "_" + todayYmd() + ".xlsx", XLSX.write(wb, { bookType: "xlsx", type: "array" }), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+}
+async function ctmsSitesImportFile(input){
+  const d = ctmsSiteDraft, file = input.files && input.files[0];
+  input.value = ""; // 같은 파일을 다시 고를 수 있게
+  if(!d || !d.edit || !file) return;
+  let raw;
+  try{
+    const wb = XLSX.read(await file.arrayBuffer(), { type: "array" });
+    raw = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: "", raw: false });
+  }catch(e){ showToast("엑셀 파일을 읽지 못했어요: " + e.message, { error: true }); return; }
+  const colMap = {};
+  Object.keys(raw[0] || {}).forEach(h => { const k = ctmsSiteColKey(h); if(k && !Object.values(colMap).includes(k)) colMap[h] = k; });
+  if(!Object.values(colMap).includes("name")){ showToast("'기관명' 열을 찾지 못했어요. '엑셀 내보내기'로 양식을 받아 첫 줄 열 이름을 확인해 주세요.", { error: true }); return; }
+  const rows = [], badStatus = [];
+  let blank = 0;
+  raw.forEach((r, i) => {
+    const v = {}; Object.keys(colMap).forEach(h => { v[colMap[h]] = String(r[h] == null ? "" : r[h]).trim(); });
+    if(!v.name){ if(v.pi || v.status) blank++; return; }
+    let st = CTMS_SITE_STATUS.find(s => s.toLowerCase() === (v.status || "").toLowerCase()) || "";
+    if(v.status && !st) badStatus.push(i + 2);
+    rows.push({ name: v.name, pi: v.pi || "", status: st });
+  });
+  if(!rows.length){ showToast("가져올 기관이 없어요 (기관명이 있는 행이 없음)", { error: true }); return; }
+  ctmsSitesCollect();
+  d.pending = { rows, blank, badStatus, file: file.name };
+  ctmsSitesImportRender();
+}
+function ctmsSitesImportRender(){
+  const box = document.getElementById("cs-import"), d = ctmsSiteDraft;
+  if(!box || !d) return;
+  const p = d.pending;
+  if(!p){ box.innerHTML = ""; return; }
+  const cur = d.rows.filter(r => r.name || r.pi);
+  const have = new Set(cur.map(ctmsSiteKey));
+  const dup = p.rows.filter(r => have.has(ctmsSiteKey(r))).length;
+  const btn = (label, fn, main) => '<button class="add-btn" style="padding:5px 10px;font-size:12px;' + (main ? '' : 'background:#fff;color:#475569;border:1px solid var(--border);') + '" onclick="' + fn + '">' + label + '</button>';
+  box.innerHTML = '<div style="padding:10px;border:1px solid #BFD3E6;border-radius:8px;background:#F3F8FC;margin-bottom:10px;font-size:12.5px;color:#334155;line-height:1.6;">' +
+    '<b>' + esc(p.file) + '</b>에서 기관 <b>' + p.rows.length + '곳</b>을 읽었어요.' +
+    (p.blank ? ' <span style="color:#B45309;">기관명이 빈 ' + p.blank + '행은 건너뛰었어요.</span>' : '') +
+    (p.badStatus.length ? ' <span style="color:#B45309;">상태 값을 알 수 없는 ' + p.badStatus.length + '행(엑셀 ' + p.badStatus.slice(0, 5).join(", ") + (p.badStatus.length > 5 ? " 등" : "") + '행)은 상태 없이 넣어요.</span>' : '') +
+    '<div style="margin:4px 0 8px;color:#64748B;">' + (cur.length ? '지금 목록 ' + cur.length + '곳' + (dup ? ', 이 중 같은 기관명+PI ' + dup + '곳' : '') : '지금 목록은 비어 있어요') + '. 저장을 눌러야 반영돼요.</div>' +
+    '<div style="display:flex;gap:6px;flex-wrap:wrap;">' +
+      btn(cur.length ? '목록 바꾸기 (' + p.rows.length + '곳)' : '목록에 넣기', "ctmsSitesImportApply('replace')", true) +
+      (cur.length ? btn('뒤에 추가 (' + (p.rows.length - dup) + '곳' + (dup ? ', 중복 ' + dup + '곳 제외' : '') + ')', "ctmsSitesImportApply('append')") : '') +
+      btn('취소', "ctmsSitesImportApply('')") +
+    '</div></div>';
+}
+function ctmsSitesImportApply(mode){
+  const d = ctmsSiteDraft; if(!d || !d.edit) return;
+  const p = d.pending; d.pending = null;
+  if(p && mode){
+    ctmsSitesCollect();
+    const cur = d.rows.filter(r => r.name || r.pi);
+    const byKey = {}; cur.forEach(r => { if(!byKey[ctmsSiteKey(r)]) byKey[ctmsSiteKey(r)] = r; });
+    if(mode === "replace"){
+      // 같은 기관명+PI는 기존 행의 id·KOL 연결을 이어받는다
+      d.rows = p.rows.map(r => { const o = byKey[ctmsSiteKey(r)]; return Object.assign(o ? { id: o.id, kolId: o.kolId || null } : { id: uid("site"), kolId: null }, r); });
+    }else{
+      d.rows = cur.concat(p.rows.filter(r => !byKey[ctmsSiteKey(r)]).map(r => Object.assign({ id: uid("site"), kolId: null }, r)));
+    }
+    showToast("엑셀 내용을 목록에 넣었어요. 확인 후 저장을 눌러 주세요");
+  }
+  ctmsSitesImportRender();
+  ctmsSitesRender();
 }
 
 /* --- KOL 쪽: 이 KOL이 PI인 CTMS 기관 --- */
