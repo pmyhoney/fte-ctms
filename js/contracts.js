@@ -41,14 +41,65 @@ function renderCtmsContracts(){
       '<div class="subtotal-item" style="background:#F3ECFC;"><div class="subtotal-label" style="color:#7B4FAE;">총 계약금액(원)</div><div class="subtotal-value">' + fmtK(total) + '</div></div>' +
       '<div class="subtotal-item" style="background:#E4F4F8;"><div class="subtotal-label" style="color:#0E8CA6;">지급(원)</div><div class="subtotal-value">' + fmtK(paid) + '</div></div>' +
       '<div class="subtotal-item" style="background:' + (unreported ? '#FEF3E2' : '#EEF2F6') + ';"><div class="subtotal-label" style="color:' + (unreported ? '#B45309' : '#475569') + ';">지출보고 미입력</div><div class="subtotal-value">' + unreported + '<span class="subtotal-unit">건</span></div></div>' +
-    '</div>' + ctmsFilterRow(viewSel) + '</div>';
-  let shown = groups;
-  if(ui.ctView === "entered") shown = groups.filter(g => ctList(g.gid).length > 0);
-  if(ui.ctView === "unreported") shown = groups.filter(g => ctList(g.gid).some(c => (c.payments || []).some(p => ctNeedsReport(c, p))));
+    '</div>' + ctmsFilterRow(viewSel) +
+    '<div style="display:flex;justify-content:flex-end;margin-top:10px;"><button class="btn-export view-ok" onclick="ctExportExcel()"' + (all.length ? '' : ' disabled style="opacity:0.4;"') + '>' + icon("download", 14) + ' 계약관리 엑셀 다운로드</button></div>' +
+    '</div>';
+  const shown = ctShownGroups(groups);
   if(shown.length === 0) html += '<div class="card"><div class="empty">조건에 맞는 과제가 없어요.</div></div>';
   shown.forEach(g => { html += ctGroupCardHtml(g); });
   html += '<div style="font-size:11.5px;color:#94A3B8;padding:0 4px;">금액 단위는 원이에요. 과제 담당자와 관리자만 입력·수정할 수 있어요. 지급 계획을 바꾸면 변경 사유와 바뀌기 전·후 내용이 이력으로 남아요.</div></div>';
   return html;
+}
+// 화면 위쪽 필터(담당자·진행 과제·계약 보기)에 맞는 과제 — 목록과 엑셀이 같은 기준을 쓴다
+function ctShownGroups(groups){
+  const v = state.ctmsUi.ctView;
+  if(v === "entered") return groups.filter(g => ctList(g.gid).length > 0);
+  if(v === "unreported") return groups.filter(g => ctList(g.gid).some(c => (c.payments || []).some(p => ctNeedsReport(c, p))));
+  return groups;
+}
+
+// 지금 보이는 과제의 계약관리 내역을 시트 5개(계약·변경 이력·지급 계획·지급 계획 변경 이력·입금 내역)로 내려받는다
+async function ctExportExcel(){
+  const groups = ctShownGroups(ctmsFilteredGroups()).filter(g => ctList(g.gid).length > 0);
+  if(groups.length === 0){ showToast("내려받을 계약이 없어요", { error: true }); return; }
+  const contracts = [], amends = [], plans = [], hists = [], pays = [];
+  groups.forEach(g => {
+    const task = g.primary.taskName, owner = ctmsNamesOf(g).join(", ");
+    ctList(g.gid).forEach(c => {
+      const base = { "과제명": task, "계약 구분": ctTypeOf(c.type).label, "계약 상대": c.party || "" };
+      const plan = c.plan || [], paid = ctSum(c.payments);
+      contracts.push(Object.assign({ "담당자": owner }, base, {
+        "계약명": c.title || "", "계약 체결일": c.signedDate || "", "계약 만료일": c.expireDate || "",
+        "계약금액(원)": c.amount == null ? "" : Number(c.amount), "변경 횟수": (c.amendments || []).length,
+        "지급 계획 합계(원)": ctSum(plan), "지급 합계(원)": paid, "잔액(원)": (c.amount == null ? ctSum(plan) : Number(c.amount)) - paid,
+        "지출보고 미입력(건)": (c.payments || []).filter(p => ctNeedsReport(c, p)).length, "메모": c.memo || "",
+      }));
+      (c.amendments || []).slice().sort((x, y) => (Number(x.no) || 0) - (Number(y.no) || 0)).forEach(m =>
+        amends.push(Object.assign({}, base, { "변경 차수": Number(m.no) || m.no, "변경 계약 체결일": m.date || "", "변경 내역": m.detail || "" })));
+      plan.forEach(p => {
+        const pp = ctSum((c.payments || []).filter(x => x.planId === p.id));
+        plans.push(Object.assign({}, base, { "지급 조건": p.label || "", "지급 예정일": p.dueDate || "", "계획 금액(원)": Number(p.amount) || 0, "지급액(원)": pp, "미지급(원)": (Number(p.amount) || 0) - pp }));
+      });
+      const desc = (arr) => (arr || []).map(x => (x.label || "-") + " " + (x.dueDate || "일정 미정") + " " + fmtK(x.amount) + "원").join("\n");
+      (c.planHistory || []).forEach(h =>
+        hists.push(Object.assign({}, base, { "변경일": String(h.time || "").slice(0, 10), "변경자": h.by || "", "관련 변경 차수": h.amendNo ? h.amendNo + "차" : "",
+          "변경 사유": h.reason || "", "변경 전 합계(원)": ctSum(h.before), "변경 후 합계(원)": ctSum(h.after), "변경 전 계획": desc(h.before), "변경 후 계획": desc(h.after) })));
+      (c.payments || []).slice().sort((x, y) => String(x.date || "").localeCompare(String(y.date || ""))).forEach(p => {
+        const pl = plan.find(x => x.id === p.planId);
+        pays.push(Object.assign({}, base, { "결제 상신일자": p.date || "", "지급 비용(원)": Number(p.amount) || 0, "지급 계획 항목": pl ? pl.label : "", "메모": p.memo || "",
+          "지출보고 입력": c.type === "site" ? (p.reported ? "입력 완료" : "미입력") : "해당 없음" }));
+      });
+    });
+  });
+  const wb = XLSX.utils.book_new();
+  const add = (rows, name, empty) => XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows.length ? rows : [{ "내용": empty }]), name);
+  add(contracts, "계약", "");
+  add(amends, "계약 변경 이력", "변경 계약이 없어요");
+  add(plans, "지급 계획", "지급 계획이 없어요");
+  add(hists, "지급 계획 변경 이력", "지급 계획 변경 이력이 없어요");
+  add(pays, "입금 내역", "입금 내역이 없어요");
+  const xlsxData = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+  await saveFileToViewer("계약관리_" + todayYmd() + ".xlsx", xlsxData, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
 }
 
 function ctGroupCardHtml(g){
