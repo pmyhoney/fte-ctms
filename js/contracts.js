@@ -212,8 +212,8 @@ function ctEditOpen(gid, id){
   showModal(
     '<div style="font-weight:800;font-size:14px;margin-bottom:4px;">' + (c ? '계약 수정' : '계약 추가') + '</div>' +
     '<div style="font-size:11.5px;color:#94A3B8;margin-bottom:10px;">' + esc(ctmsGroupName(gid)) + '</div>' +
-    ctmsSheetField("계약 구분", '<select id="ct-type" class="input" style="font-size:13px;">' + CT_TYPES.map(t => '<option value="' + t.key + '"' + ((c ? c.type : "cro") === t.key ? " selected" : "") + '>' + t.label + '</option>').join("") + '</select>') +
-    ctmsSheetField("계약 상대 (CRO·기관·연구자·자문위원 등)", '<input id="ct-party" class="input" style="font-size:13px;" placeholder="예: OO대학교병원 / 홍길동 교수" value="' + v("party") + '"/>') +
+    ctmsSheetField("계약 구분", '<select id="ct-type" class="input" style="font-size:13px;" onchange="ctPartyRender(\'' + gid + '\', ctPartyTyped())">' + CT_TYPES.map(t => '<option value="' + t.key + '"' + ((c ? c.type : "cro") === t.key ? " selected" : "") + '>' + t.label + '</option>').join("") + '</select>') +
+    '<div id="ct-party-wrap"></div>' +
     ctmsSheetField("계약명 (선택)", '<input id="ct-title" class="input" style="font-size:13px;" placeholder="예: 임상시험 실시 계약" value="' + v("title") + '"/>') +
     '<div class="wk-form" style="grid-template-columns:1fr 1fr;">' +
       ctmsSheetField("계약 체결일", '<input id="ct-signed" type="date" class="input" style="font-size:13px;" value="' + v("signedDate") + '"/>') +
@@ -223,7 +223,53 @@ function ctEditOpen(gid, id){
     ctmsSheetField("메모", '<textarea id="ct-memo" class="input" rows="2" style="font-size:13px;">' + v("memo") + '</textarea>') +
     '<div id="ctms-sheet-err" style="display:none;font-size:12px;color:var(--danger);"></div>' +
     ctmsSheetButtons(null), "md");
+  ctPartyRender(gid, c ? c.party : "");
   document.getElementById("ctms-sheet-save").onclick = () => ctSave(gid, id);
+}
+// CTMS에 이미 입력된 이름: CRO 계약 → 진행 트래커의 CRO, 실시기관 계약 → 기관 관리의 기관명
+function ctPartyChoices(gid, type){
+  const rec = state.ctms[gid];
+  if(!rec) return [];
+  const seen = {}, out = [];
+  const add = (value, label) => { if(value && !seen[value]){ seen[value] = true; out.push({ value, label }); } };
+  if(type === "cro" && !rec.croNone) ctmsCrosOf(rec).forEach(n => add(String(n || "").trim(), String(n || "").trim()));
+  if(type === "site") ctmsSitesOf(rec).forEach(s => { const n = String(s.name || "").trim(); add(n, n + (s.pi ? " (PI " + s.pi + ")" : "")); });
+  return out;
+}
+// 계약 상대 칸: CTMS에 입력된 이름이 있으면 드롭다운에서 고르고, 없는 이름은 '직접 입력'으로 새로 쓴다.
+// 고른 값은 항상 #ct-party에 넣어 두므로 저장(ctSave)은 그 칸만 읽는다.
+function ctPartyRender(gid, current){
+  const type = document.getElementById("ct-type").value;
+  const choices = ctPartyChoices(gid, type);
+  const src = type === "cro" ? "CTMS 진행 트래커의 CRO" : "CTMS 기관 관리의 기관";
+  const ph = type === "cro" ? "예: ○○ CRO" : type === "site" ? "예: ○○대학교병원" : "예: 홍길동 교수 / ○○ 회사";
+  const cur = String(current || "");
+  const picked = choices.some(o => o.value === cur) ? cur : (cur || choices.length === 0 ? "__new" : choices[0].value);
+  const input = '<input id="ct-party" class="input" style="font-size:13px;' + (picked === "__new" ? '' : 'display:none;') + '" placeholder="' + ph + '" value="' + esc(picked === "__new" ? cur : picked) + '"/>';
+  const label = type === "cro" ? "계약 상대 (CRO)" : type === "site" ? "계약 상대 (실시기관)" : "계약 상대 (기관·연구자·자문위원 등)";
+  let html;
+  if(choices.length){
+    html = ctmsSheetField(label,
+      '<select id="ct-pick" class="input" style="font-size:13px;margin-bottom:6px;" onchange="ctPartyPick(this.value)">' +
+        choices.map(o => '<option value="' + esc(o.value) + '"' + (o.value === picked ? " selected" : "") + '>' + esc(o.label) + '</option>').join("") +
+        '<option value="__new"' + (picked === "__new" ? " selected" : "") + '>＋ 직접 입력 (목록에 없는 이름)</option>' +
+      '</select>' + input +
+      '<div style="font-size:11px;color:#94A3B8;margin-top:3px;">' + src + ' 목록이에요.</div>');
+  }else{
+    html = ctmsSheetField(label, input +
+      ((type === "cro" || type === "site") ? '<div style="font-size:11px;color:#94A3B8;margin-top:3px;">' + src + '이 아직 없어서 직접 입력해 주세요.</div>' : ''));
+  }
+  document.getElementById("ct-party-wrap").innerHTML = html;
+}
+// 계약 구분을 바꿀 때는 직접 입력한 이름만 이어 쓴다 (이전 구분의 목록에서 고른 이름은 버림)
+function ctPartyTyped(){
+  const pick = document.getElementById("ct-pick");
+  return pick && pick.value !== "__new" ? "" : document.getElementById("ct-party").value;
+}
+function ctPartyPick(v){
+  const el = document.getElementById("ct-party");
+  if(v === "__new"){ el.value = ""; el.style.display = ""; el.focus(); }
+  else{ el.value = v; el.style.display = "none"; }
 }
 function ctSave(gid, id){
   if(!ctmsCanEdit(gid)) return;
