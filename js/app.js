@@ -152,7 +152,8 @@ let state = {
   ctmsExcluded: {},    // CTMS 목록에서 삭제(제외)한 과제 gid — 배정(FTE) 데이터는 그대로
   ctmsIssues: {}, // gid -> 진행상황/이슈 기록
   ctmsCost: {},   // gid -> 비용(계획/집행) 기록
-  ctmsUi: { sub: "tracker", view: "all", member: "전체", scope: "all", open: {}, issueView: "all", issueOpen: {}, costView: "all", costOpen: {}, costYear: new Date().getFullYear() },
+  ctmsContracts: {}, // gid -> 계약·지급 계획·입금 기록 (contracts.js)
+  ctmsUi: { sub: "tracker", view: "all", member: "전체", scope: "all", open: {}, issueView: "all", issueOpen: {}, costView: "all", costOpen: {}, costYear: new Date().getFullYear(), ctView: "all", ctOpen: {} },
   activityLog: [],
   lastAction: null,
   lastBackupMeta: null,
@@ -348,7 +349,7 @@ async function saveNow(){
 
     const result = await window.storage.set(STORAGE_KEY, JSON.stringify({
       taskTypes: state.taskTypes, members: state.members, products: state.products, assignments: state.assignments,
-      ctms: state.ctms, ctmsIssues: state.ctmsIssues, ctmsCost: state.ctmsCost, ctmsExcluded: state.ctmsExcluded,
+      ctms: state.ctms, ctmsIssues: state.ctmsIssues, ctmsCost: state.ctmsCost, ctmsContracts: state.ctmsContracts, ctmsExcluded: state.ctmsExcluded,
       activityLog: state.activityLog,
       savedAt: new Date().toISOString()
     }), true); // shared: visible to everyone who opens this artifact
@@ -450,6 +451,8 @@ async function loadAppData(){
       if(parsed.ctms && typeof parsed.ctms === "object" && !Array.isArray(parsed.ctms)) state.ctms = parsed.ctms;
       if(parsed.ctmsIssues && typeof parsed.ctmsIssues === "object" && !Array.isArray(parsed.ctmsIssues)) state.ctmsIssues = parsed.ctmsIssues;
       if(parsed.ctmsCost && typeof parsed.ctmsCost === "object" && !Array.isArray(parsed.ctmsCost)) state.ctmsCost = parsed.ctmsCost;
+    if(parsed.ctmsContracts && typeof parsed.ctmsContracts === "object" && !Array.isArray(parsed.ctmsContracts)) state.ctmsContracts = parsed.ctmsContracts;
+      if(parsed.ctmsContracts && typeof parsed.ctmsContracts === "object" && !Array.isArray(parsed.ctmsContracts)) state.ctmsContracts = parsed.ctmsContracts;
       if(parsed.ctmsExcluded && typeof parsed.ctmsExcluded === "object" && !Array.isArray(parsed.ctmsExcluded)) state.ctmsExcluded = parsed.ctmsExcluded;
     }
     gotCloudData = !!(sharedRes && sharedRes.value); // only the real shared read counts as "confirmed"
@@ -489,7 +492,7 @@ function confirmFreshStart(){
 async function downloadBackup(){
   const payload = {
     taskTypes: state.taskTypes, members: state.members, products: state.products, assignments: state.assignments,
-    ctms: state.ctms, ctmsIssues: state.ctmsIssues, ctmsCost: state.ctmsCost, ctmsExcluded: state.ctmsExcluded,
+    ctms: state.ctms, ctmsIssues: state.ctmsIssues, ctmsCost: state.ctmsCost, ctmsContracts: state.ctmsContracts, ctmsExcluded: state.ctmsExcluded,
     exportedAt: new Date().toISOString()
   };
   const saved = await saveFileToViewer("FTE_백업_" + currentPeriod() + ".json", JSON.stringify(payload, null, 2), "application/json");
@@ -2594,7 +2597,7 @@ async function ctmsOwnerSaveNow(){
     const pick = (obj) => { const out = {}; gids.forEach(gid => { if(obj[gid] !== undefined) out[gid] = obj[gid]; }); return out; };
     const { error } = await sb.rpc("save_ctms", {
       p_gids: gids, p_ctms: pick(state.ctms), p_issues: pick(state.ctmsIssues), p_cost: pick(state.ctmsCost),
-      p_log: state.activityLog || [],
+      p_log: state.activityLog || [], p_contracts: pick(state.ctmsContracts),
     });
     if(error) throw error;
     gids.forEach(g => { delete state.ctmsTouched[g]; });
@@ -3165,6 +3168,7 @@ function renderCtmsTab(){
   const sub = state.ctmsUi.sub;
   if(sub === "issues") return bar + ctmsSubTabBar() + renderCtmsIssues();
   if(sub === "cost") return bar + ctmsSubTabBar() + renderCtmsCost();
+  if(sub === "contract") return bar + ctmsSubTabBar() + renderCtmsContracts(); // contracts.js
   return bar + ctmsSubTabBar() + renderCtmsTrackerTab();
 }
 function renderCtmsTrackerTab(){
@@ -3262,7 +3266,7 @@ function ctmsSubTabBar(){
   const sub = state.ctmsUi.sub;
   const btn = (id, label) => '<button class="view-ok" onclick="ctmsSetSub(\'' + id + '\')" style="flex:1;padding:9px 10px;border-radius:8px;border:1px solid ' +
     (sub === id ? "var(--accent)" : "var(--border)") + ';background:' + (sub === id ? "var(--accent)" : "#fff") + ';color:' + (sub === id ? "#fff" : "#475569") + ';font-size:13px;font-weight:700;">' + label + '</button>';
-  return '<div style="display:flex;gap:6px;margin-bottom:14px;">' + btn("tracker", "진행 트래커") + btn("issues", "진행·이슈") + btn("cost", "비용") + '</div>';
+  return '<div style="display:flex;gap:6px;margin-bottom:14px;">' + btn("tracker", "진행 트래커") + btn("issues", "진행·이슈") + btn("cost", "비용") + btn("contract", "계약관리") + '</div>';
 }
 function ctmsSetSub(id){ state.ctmsUi.sub = id; renderTabContent(); }
 function ctmsFilterRow(extraSelectHtml){

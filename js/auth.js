@@ -123,7 +123,7 @@ async function logout(reason){
   Object.assign(state, {
     role: null, loaded: false, dirty: false, saveError: false, saveBlocked: false,
     taskTypes: [], members: [], products: [], assignments: [], activityLog: [],
-    ctms: {}, ctmsIssues: {}, ctmsCost: {}, ctmsExcluded: {}, ctmsTouched: {}, ctmsAuth: null,
+    ctms: {}, ctmsIssues: {}, ctmsCost: {}, ctmsContracts: {}, ctmsExcluded: {}, ctmsTouched: {}, ctmsAuth: null,
   });
   document.body.classList.remove("role-viewer", "ctms-edit", "save-blocked");
   renderAuthScreen("login", typeof reason === "string" ? reason : "");

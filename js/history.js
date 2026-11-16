@@ -273,7 +273,7 @@ function histStateDiff(oldV, newV){
   listDiff("taskTypes", "과제 유형", (x) => x.name);
   listDiff("assignments", "과제 배정", (x, v) => [x.taskName, memberName(v, x.memberId)].filter(Boolean).join(" · "));
   const taskOf = (gid) => { const a = (newV.assignments || []).concat(oldV.assignments || []).find(x => (x.groupId || x.id) === gid); return a ? a.taskName : gid; };
-  [["ctms", "CTMS 진행"], ["ctmsCost", "CTMS 비용"], ["ctmsIssues", "CTMS 이슈"]].forEach(([key, label]) => {
+  [["ctms", "CTMS 진행"], ["ctmsCost", "CTMS 비용"], ["ctmsIssues", "CTMS 이슈"], ["ctmsContracts", "CTMS 계약"]].forEach(([key, label]) => {
     const o = oldV[key] || {}, n = newV[key] || {}, out = [];
     [...new Set(Object.keys(o).concat(Object.keys(n)))].forEach(gid => {
       if(!(gid in o)) out.push(["추가", taskOf(gid)]);
