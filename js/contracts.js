@@ -87,7 +87,8 @@ async function ctExportExcel(){
         "지출보고 미입력(건)": (c.payments || []).filter(p => ctNeedsReport(c, p)).length, "메모": c.memo || "",
       }));
       (c.amendments || []).slice().sort((x, y) => (Number(x.no) || 0) - (Number(y.no) || 0)).forEach(m =>
-        amends.push(Object.assign({}, base, { "변경 차수": Number(m.no) || m.no, "변경 계약 체결일": m.date || "", "변경 내역": m.detail || "" })));
+        amends.push(Object.assign({}, base, { "변경 차수": Number(m.no) || m.no, "변경 계약 체결일": m.date || "",
+          "변경 전 만료일": m.newExpire ? m.prevExpire || "" : "", "변경 후 만료일": m.newExpire || "", "변경 내역": m.detail || "" })));
       plan.forEach(p => {
         const pp = ctSum((c.payments || []).filter(x => x.planId === p.id));
         plans.push(Object.assign({}, base, { "지급 조건": p.label || "", "지급 예정일": p.dueDate || "", "계획 금액(원)": Number(p.amount) || 0, "지급액(원)": pp, "미지급(원)": (Number(p.amount) || 0) - pp }));
@@ -151,7 +152,9 @@ function ctContractHtml(gid, c, canEdit){
   const amends = (c.amendments || []).slice().sort((x, y) => (Number(x.no) || 0) - (Number(y.no) || 0));
   const amendHtml = amends.length ? amends.map(m => row(
     '<b style="flex:0 0 auto;">' + esc(m.no) + '차</b><span style="color:#64748B;flex:0 0 auto;">' + esc(m.date || "") + '</span>' +
-    '<span style="flex:1;min-width:0;white-space:pre-wrap;">' + esc(m.detail || "") + '</span>' +
+    '<span style="flex:1;min-width:0;white-space:pre-wrap;">' +
+      (m.newExpire ? '<span class="tr-chip" style="color:#1F5C8C;background:#E6EFF7;margin-right:6px;">만료일 ' + esc(m.prevExpire || "–") + ' → ' + esc(m.newExpire) + '</span>' : '') +
+      esc(m.detail || (m.newExpire ? "계약 만료일 변경" : "")) + '</span>' +
     iconBtns("ctAmendOpen('" + a + "','" + m.id + "')", "ctAmendDelete('" + a + "','" + m.id + "')"))).join("") : none("변경 계약이 없어요.");
 
   const plan = c.plan || [], hist = c.planHistory || [];
@@ -336,6 +339,10 @@ function ctDelete(gid, id){
 }
 
 /* ---------- 계약 변경 이력 (변경 차수·변경 계약 체결일·변경 내역) ---------- */
+// 만료일을 바꾼 변경 중 차수가 가장 큰 것
+function ctLatestExpireAmend(c){
+  return (c.amendments || []).filter(x => x.newExpire).sort((x, y) => (Number(y.no) || 0) - (Number(x.no) || 0))[0] || null;
+}
 function ctAmendOpen(gid, id, mid){
   if(!ctmsCanEdit(gid)) return;
   const c = ctFind(gid, id); if(!c) return;
@@ -348,8 +355,10 @@ function ctAmendOpen(gid, id, mid){
       ctmsSheetField("변경 차수", '<input id="ca-no" type="number" min="1" step="1" class="input" style="font-size:13px;" value="' + esc(m ? m.no : nextNo) + '"/>') +
       ctmsSheetField("변경 계약 체결일", '<input id="ca-date" type="date" class="input" style="font-size:13px;" value="' + esc(m ? m.date : ctmsToday()) + '"/>') +
     '</div>' +
-    ctmsSheetField("변경 내역", '<textarea id="ca-detail" class="input" rows="3" style="font-size:13px;" placeholder="예: 대상자 수 증가(30→40명)에 따른 연구비 증액, 계약기간 6개월 연장">' + esc(m ? m.detail : "") + '</textarea>') +
-    (m ? '' : '<div style="font-size:11.5px;color:#64748B;margin-bottom:6px;">변경 내용 중 만료일·계약금액이 바뀌었다면 계약 정보에서도 고쳐 주세요. 지급 계획이 바뀌면 \'계획 변경\'에서 이 변경 차수를 골라 남길 수 있어요.</div>') +
+    ctmsSheetField("변경 후 계약 만료일 (만료일이 바뀌는 경우만)", '<input id="ca-expire" type="date" class="input" style="font-size:13px;" value="' + esc(m ? m.newExpire || "" : "") + '"/>' +
+      '<div style="font-size:11px;color:#94A3B8;margin-top:3px;">현재 만료일 ' + esc(c.expireDate || "미입력") + ' · 입력하면 계약 만료일이 이 날짜로 바뀌고, 변경 전 만료일은 이력에 남아요.</div>') +
+    ctmsSheetField("변경 내역 (만료일만 바뀌면 비워도 돼요)", '<textarea id="ca-detail" class="input" rows="3" style="font-size:13px;" placeholder="예: 대상자 수 증가(30→40명)에 따른 연구비 증액">' + esc(m ? m.detail : "") + '</textarea>') +
+    (m ? '' : '<div style="font-size:11.5px;color:#64748B;margin-bottom:6px;">계약금액이 바뀌었다면 계약 정보에서도 고쳐 주세요. 지급 계획이 바뀌면 \'계획 변경\'에서 이 변경 차수를 골라 남길 수 있어요.</div>') +
     '<div id="ctms-sheet-err" style="display:none;font-size:12px;color:var(--danger);"></div>' +
     ctmsSheetButtons(null), "md");
   document.getElementById("ctms-sheet-save").onclick = () => ctAmendSave(gid, id, mid);
@@ -358,13 +367,27 @@ function ctAmendSave(gid, id, mid){
   if(!ctmsCanEdit(gid)) return;
   const c = ctFind(gid, id); if(!c) return;
   const rec = { no: Number(document.getElementById("ca-no").value) || null, date: document.getElementById("ca-date").value, detail: document.getElementById("ca-detail").value.trim() };
+  const newExpire = document.getElementById("ca-expire").value;
   if(!rec.no){ ctmsSheetError("변경 차수를 입력해 주세요."); return; }
-  if(!rec.detail){ ctmsSheetError("변경 내역을 입력해 주세요."); return; }
+  if(!rec.detail && !newExpire){ ctmsSheetError("변경 내역이나 변경 후 만료일을 입력해 주세요."); return; }
+  if(newExpire && c.signedDate && newExpire < c.signedDate){ ctmsSheetError("변경 후 만료일이 계약 체결일보다 빨라요."); return; }
   if(!c.amendments) c.amendments = [];
   if((c.amendments).some(x => x.id !== mid && Number(x.no) === rec.no)){ ctmsSheetError(rec.no + "차 변경이 이미 있어요."); return; }
-  if(mid){ const m = c.amendments.find(x => x.id === mid); if(m) Object.assign(m, rec); }
+  const m = mid ? c.amendments.find(x => x.id === mid) : null;
+  if(mid && !m) return;
+  const hadExpire = !!(m && m.newExpire), oldPrev = m ? m.prevExpire || "" : "";
+  // 변경 전 만료일은 이 변경을 처음 기록할 때의 만료일로 남긴다
+  rec.newExpire = newExpire;
+  rec.prevExpire = newExpire ? (hadExpire ? oldPrev : (c.expireDate || "")) : "";
+  if(m) Object.assign(m, rec);
   else c.amendments.push(Object.assign({ id: uid("ca") }, rec));
-  logActivity('CTMS 계약 변경 ' + (mid ? '수정' : '추가') + ': "' + ctmsGroupName(gid) + '" - ' + c.party + ' ' + rec.no + '차');
+  // 계약 만료일 = 만료일을 바꾼 가장 최근 차수의 변경 후 만료일 (만료일 변경을 지웠으면 그 전 만료일로 되돌림)
+  const latest = ctLatestExpireAmend(c);
+  const before = c.expireDate;
+  if(latest) c.expireDate = latest.newExpire;
+  else if(hadExpire) c.expireDate = oldPrev;
+  logActivity('CTMS 계약 변경 ' + (mid ? '수정' : '추가') + ': "' + ctmsGroupName(gid) + '" - ' + c.party + ' ' + rec.no + '차' +
+    (before !== c.expireDate ? ' (만료일 ' + (before || "–") + ' → ' + (c.expireDate || "–") + ')' : ''));
   closeModal();
   ctmsPersist(gid); renderTabContent();
 }
@@ -373,9 +396,13 @@ function ctAmendDelete(gid, id, mid){
   const c = ctFind(gid, id); if(!c) return;
   const idx = (c.amendments || []).findIndex(x => x.id === mid);
   if(idx < 0) return;
+  const wasLatest = (ctLatestExpireAmend(c) || {}).id === mid, oldExpire = c.expireDate;
   const removed = c.amendments.splice(idx, 1)[0];
-  logActivity('CTMS 계약 변경 삭제: "' + ctmsGroupName(gid) + '" - ' + c.party + ' ' + removed.no + '차');
-  state.lastAction = { gid, restore: () => { c.amendments.splice(Math.min(idx, c.amendments.length), 0, removed); }, undoMsg: '계약 변경 삭제 취소' };
+  // 계약 만료일을 정한 변경을 지우면 그 전 차수의 만료일(없으면 변경 전 만료일)로 되돌린다
+  if(wasLatest){ const l = ctLatestExpireAmend(c); c.expireDate = l ? l.newExpire : removed.prevExpire || ""; }
+  logActivity('CTMS 계약 변경 삭제: "' + ctmsGroupName(gid) + '" - ' + c.party + ' ' + removed.no + '차' +
+    (oldExpire !== c.expireDate ? ' (만료일 ' + (oldExpire || "–") + ' → ' + (c.expireDate || "–") + ')' : ''));
+  state.lastAction = { gid, restore: () => { c.amendments.splice(Math.min(idx, c.amendments.length), 0, removed); c.expireDate = oldExpire; }, undoMsg: '계약 변경 삭제 취소' };
   showUndoToast(removed.no + "차 변경을 삭제했어요");
   ctmsPersist(gid); renderTabContent();
 }
