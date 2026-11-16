@@ -21,6 +21,18 @@ const ctSum = (arr) => (arr || []).reduce((n, x) => n + (Number(x.amount) || 0),
 const ctWon = (n) => fmtK(n) + "원";
 // 지출보고 시스템 입력이 필요한 입금: 실시기관 계약의 입금 중 아직 체크하지 않은 것
 const ctNeedsReport = (c, p) => c.type === "site" && !p.reported;
+// 만료 임박: 오늘(한국 시간)부터 3개월 안에 만료되는 계약이면 남은 일수, 아니면 null (이미 지난 계약은 제외)
+const CT_SOON_MONTHS = 3;
+function ctExpireSoon(c){
+  if(!c.expireDate) return null;
+  const today = wfhKst().day, d = new Date(today + "T00:00:00Z");
+  d.setUTCMonth(d.getUTCMonth() + CT_SOON_MONTHS);
+  if(c.expireDate < today || c.expireDate > d.toISOString().slice(0, 10)) return null;
+  return Math.round((new Date(c.expireDate + "T00:00:00Z") - new Date(today + "T00:00:00Z")) / 86400000);
+}
+function ctExpireBadge(days){
+  return '<span class="tr-chip" style="color:#B45309;background:#FEF3E2;">⚠ ' + (days === 0 ? '오늘 만료' : '만료 임박 D-' + days) + '</span>';
+}
 
 function ctToggle(gid){ state.ctmsUi.ctOpen[gid] = !state.ctmsUi.ctOpen[gid]; renderTabContent(); }
 function ctToggleSection(key){ state.ctmsUi.ctOpen[key] = !state.ctmsUi.ctOpen[key]; renderTabContent(); }
@@ -106,6 +118,7 @@ function ctGroupCardHtml(g){
   const list = ctList(g.gid), canEdit = ctmsCanEdit(g.gid), open = !!state.ctmsUi.ctOpen[g.gid];
   const total = ctSum(list), paid = list.reduce((n, c) => n + ctSum(c.payments), 0);
   const unrep = list.reduce((n, c) => n + (c.payments || []).filter(p => ctNeedsReport(c, p)).length, 0);
+  const soon = list.filter(c => ctExpireSoon(c) !== null).length;
   const types = CT_TYPES.map(t => { const n = list.filter(c => c.type === t.key).length; return n ? t.label.replace(" 계약", "") + " " + n : ""; }).filter(Boolean).join(" · ");
   return '<div class="card" style="padding:14px;margin-bottom:0;">' +
     '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;">' +
@@ -114,6 +127,7 @@ function ctGroupCardHtml(g){
     '</div>' +
     '<div style="cursor:pointer;display:flex;justify-content:space-between;gap:8px;font-size:11.5px;color:#64748B;margin-top:10px;" onclick="ctToggle(\'' + g.gid + '\')">' +
       '<span>' + (list.length ? '계약 <b>' + list.length + '건</b>' + (types ? ' (' + esc(types) + ')' : '') + ' · 계약금액 <b>' + ctWon(total) + '</b> · 지급 <b>' + ctWon(paid) + '</b>' +
+        (soon ? ' · <span style="color:#B45309;font-weight:700;">⚠ 만료 임박 ' + soon + '건</span>' : '') +
         (unrep ? ' · <span style="color:#B45309;font-weight:700;">⚠ 지출보고 미입력 ' + unrep + '건</span>' : '') : '입력된 계약이 없어요') + '</span>' +
       '<span>' + (open ? "▾" : "▸") + '</span></div>' +
     (open ? '<div style="margin-top:12px;padding-top:12px;border-top:1px dashed var(--border);display:flex;flex-direction:column;gap:10px;">' +
@@ -172,12 +186,14 @@ function ctContractHtml(gid, c, canEdit){
     '<div style="text-align:right;font-size:11.5px;color:#64748B;">지급 합계 <b>' + ctWon(ctSum(pays)) + '</b>' + (ctSum(plan) ? ' / 계획 ' + ctWon(ctSum(plan)) : '') + '</div>'
     : none("입금 내역이 없어요.");
 
-  return '<div style="border:1px solid var(--border);border-left:4px solid ' + t.c + ';border-radius:8px;padding:10px 12px;background:#FBFCFD;">' +
+  const soon = ctExpireSoon(c);
+  return '<div id="ct-' + esc(c.id) + '" style="border:1px solid ' + (soon !== null ? '#F5C77E' : 'var(--border)') + ';border-left:4px solid ' + t.c + ';border-radius:8px;padding:10px 12px;background:' + (soon !== null ? '#FFFBF3' : '#FBFCFD') + ';">' +
     '<div style="display:flex;align-items:flex-start;gap:8px;">' +
       '<div style="flex:1;min-width:0;">' +
         '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;"><span class="tr-chip" style="color:' + t.c + ';background:' + t.s + ';">' + t.label + '</span>' +
-          '<b style="font-size:13.5px;">' + esc(c.party || "(계약 상대 미입력)") + '</b>' + (c.title ? '<span style="font-size:12px;color:#64748B;">' + esc(c.title) + '</span>' : '') + '</div>' +
-        '<div style="font-size:11.5px;color:#64748B;margin-top:4px;">체결 ' + esc(c.signedDate || "–") + ' · 만료 ' + esc(c.expireDate || "–") +
+          '<b style="font-size:13.5px;">' + esc(c.party || "(계약 상대 미입력)") + '</b>' + (c.title ? '<span style="font-size:12px;color:#64748B;">' + esc(c.title) + '</span>' : '') +
+          (soon !== null ? ctExpireBadge(soon) : '') + '</div>' +
+        '<div style="font-size:11.5px;color:#64748B;margin-top:4px;">체결 ' + esc(c.signedDate || "–") + ' · 만료 ' + (soon !== null ? '<b style="color:#B45309;">' + esc(c.expireDate) + '</b>' : esc(c.expireDate || "–")) +
           (c.amount ? ' · 계약금액 <b>' + ctWon(c.amount) + '</b>' : '') + (amends.length ? ' · 변경 ' + amends.length + '회' : '') + '</div>' +
         (c.memo ? '<div style="font-size:11.5px;color:#94A3B8;margin-top:2px;white-space:pre-wrap;">' + esc(c.memo) + '</div>' : '') +
       '</div>' +

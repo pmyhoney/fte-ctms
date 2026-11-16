@@ -5,10 +5,11 @@
    - CTMS 이슈 F/U: 미해결 이슈의 가장 최근 F/U 목표일이 지남
    - 과제 인수인계: 인수자 배정이 시작됐는데 완료일 없음 (관리자·팀장만 입력할 수 있어 그 사람들에게만)
    - 교육: 팀내 전달교육 계획일이 지났는데 '완료'가 아님
+   - CTMS 계약: 만료일이 3개월 안으로 다가온 계약 (contracts.js의 ctExpireSoon, 담당 과제·관리자만)
    '오늘 하루 창 닫기'는 이 브라우저의 localStorage에 남겨 로그아웃·재로그인해도 그날은 자동으로 띄우지 않는다. */
 
 const notice = { tx: [], uid: "", seen: null, hideMem: "" };
-const NOTICE_SECTIONS = [["wfh", "재택 일지"], ["ctms", "CTMS"], ["ho", "과제 인수인계"], ["tx", "교육 (팀내 전달교육)"]];
+const NOTICE_SECTIONS = [["wfh", "재택 일지"], ["ctms", "CTMS"], ["ct", "CTMS 계약 만료 임박"], ["ho", "과제 인수인계"], ["tx", "교육 (팀내 전달교육)"]];
 
 function noticeWfhItems(){
   return wfhAlert.items.map(x => ({
@@ -40,6 +41,24 @@ function noticeCtmsItems(){
   });
   return items;
 }
+function noticeContractItems(){
+  const owner = currentProfile.member_id || "";
+  if(!isAdmin() && !owner) return [];
+  const mine = (g) => isAdmin() || g.members.some(m => m.memberId === owner && m.status !== "종료" && m.status !== "중단");
+  const items = [];
+  ctmsGroups().filter(ctmsIsOpen).filter(mine).forEach(g => {
+    ctList(g.gid).forEach(c => {
+      const days = ctExpireSoon(c);
+      if(days === null) return;
+      items.push({
+        id: "ct:" + g.gid + ":" + c.id + ":" + c.expireDate, sec: "ct", title: g.primary.taskName,
+        sub: ctTypeOf(c.type).label + ' · ' + (c.party || "") + ' · 만료 ' + c.expireDate + (days === 0 ? ' (오늘)' : ' (D-' + days + ')'),
+        exp: c.expireDate, go: () => noticeGoContract(g.gid, c.id),
+      });
+    });
+  });
+  return items.sort((a, b) => a.exp.localeCompare(b.exp)); // 만료가 가까운 순
+}
 function noticeHandoverItems(){
   if(!isAdmin()) return [];
   const now = currentPeriod();
@@ -58,7 +77,7 @@ function noticeTxItems(){
 }
 function noticeItems(){
   if(!currentProfile || !canWrite()) return [];
-  return noticeWfhItems().concat(noticeCtmsItems(), noticeHandoverItems(), noticeTxItems());
+  return noticeWfhItems().concat(noticeCtmsItems(), noticeContractItems(), noticeHandoverItems(), noticeTxItems());
 }
 
 // 전달교육은 교육 탭을 열지 않아도 알 수 있도록 지난 계획만 따로 불러온다
@@ -135,7 +154,7 @@ function noticeRowHtml(x){
 // only: 특정 구분만 보기 (재택 탭의 버튼)
 function noticeShow(only){
   const all = noticeItems(), items = only ? all.filter(x => x.sec === only) : all;
-  if(!items.length){ showToast("입력이 필요한 항목이 없어요"); return; }
+  if(!items.length){ showToast("확인이 필요한 항목이 없어요"); return; }
   noticeMarkSeen(items);
   const sections = NOTICE_SECTIONS.map(([sec, label]) => {
     const list = items.filter(x => x.sec === sec);
@@ -143,8 +162,11 @@ function noticeShow(only){
   }).join("");
   showModal(
     '<div style="display:flex;align-items:center;gap:7px;color:var(--danger);margin-bottom:6px;">' + icon('alert', 16) +
-      '<span style="font-weight:800;font-size:14px;">입력이 필요한 항목 ' + items.length + '건</span></div>' +
-    '<div style="font-size:12.5px;color:#475569;line-height:1.6;">계획된 일정이 지났는데 실행 기록이 없어요. \'바로 가기\'를 누르면 입력 화면으로 이동해요.</div>' +
+      '<span style="font-weight:800;font-size:14px;">확인이 필요한 항목 ' + items.length + '건</span></div>' +
+    '<div style="font-size:12.5px;color:#475569;line-height:1.6;">' +
+      (items.some(x => x.sec !== "ct") ? '계획된 일정이 지났는데 실행 기록이 없어요. ' : '') +
+      (items.some(x => x.sec === "ct") ? '만료일이 3개월 안으로 다가온 계약이 있어요. ' : '') +
+      '\'바로 가기\'를 누르면 해당 화면으로 이동해요.</div>' +
     '<div class="notice-list">' + sections + '</div>' +
     '<div style="display:flex;gap:8px;margin-top:12px;">' +
       (noticeHiddenToday() ? '' : '<button class="add-btn" style="flex:1;justify-content:center;background:#fff;color:#64748B;border:1px solid var(--border);" onclick="noticeHideToday()">오늘 하루 창 닫기</button>') +
@@ -169,6 +191,16 @@ function noticeGoMilestone(gid, key){
   if(!row) return;
   row.scrollIntoView({ block: "center" });
   row.classList.add("notice-flash");
+}
+function noticeGoContract(gid, id){
+  noticeCtmsShowAll("contract");
+  state.ctmsUi.ctView = "all";
+  state.ctmsUi.ctOpen[gid] = true;
+  setTab("ctms");
+  const el = document.getElementById("ct-" + id);
+  if(!el) return;
+  el.scrollIntoView({ block: "center" });
+  el.classList.add("notice-flash");
 }
 function noticeGoFollowUp(gid, entryId){
   noticeCtmsShowAll("issues");
@@ -195,6 +227,6 @@ function noticeLines(){
     const n = items.filter(x => x.sec === sec).length;
     return n ? label + ' ' + n + '건' : '';
   }).filter(Boolean);
-  return ['입력이 필요한 항목 <b style="color:var(--danger);">' + items.length + '건</b> — ' + parts.join(' · ') +
+  return ['확인이 필요한 항목 <b style="color:var(--danger);">' + items.length + '건</b> — ' + parts.join(' · ') +
     ' <button class="p360-btn view-ok" onclick="noticeShow()">목록 보기</button>'];
 }
