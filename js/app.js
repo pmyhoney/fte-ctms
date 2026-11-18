@@ -2595,7 +2595,7 @@ function ctmsAuthBarHtml(){
   if(a.mode === "owner"){
     const m = state.members.find(x => x.id === a.ownerId);
     who = '<b>' + esc(m ? m.name : "삭제된 팀원") + '</b> 담당자 · 담당 과제만 표시 · 입력 가능';
-  }else if(a.mode === "admin") who = '<b>관리자</b> · 전체 과제 · 입력 가능';
+  }else if(a.mode === "admin") who = '<b>' + (isSysAdmin() ? '관리자' : '팀장') + '</b> · 전체 과제 · 입력 가능';
   else who = '<b>전체 조회</b> · 읽기 전용 (관리자가 계정에 팀원을 연결하면 본인 과제를 입력할 수 있어요)';
   return '<div class="ctms-authbar" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:9px 12px;background:#E5F1F1;border-radius:9px;margin-bottom:12px;font-size:12.5px;color:#1F6F78;">' +
     '<span>' + who + '</span></div>';
