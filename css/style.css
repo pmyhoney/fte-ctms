@@ -47,6 +47,8 @@ html{scroll-padding-top:calc(var(--topfix-h,0px) + 56px);}
   background:#17232E;color:#fff;font-size:12px;font-weight:600;padding:5px 9px;border-radius:6px;
   opacity:0;pointer-events:none;transition:opacity .15s;}
 .to-top:hover .to-top-tip,.to-top:focus-visible .to-top-tip{opacity:1;}
+/* 휴대폰처럼 좁은 화면에서는 윗부분이 화면을 너무 많이 가리므로 고정하지 않는다 */
+@media (max-width:640px){.topfix,.ctms-authbar{position:static;} html{scroll-padding-top:0;}}
 .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;}
 .stack{display:flex;flex-direction:column;gap:14px;}
 .empty{padding:36px 12px;text-align:center;color:#94A3B8;font-size:13.5px;}

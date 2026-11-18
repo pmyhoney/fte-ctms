@@ -2578,6 +2578,13 @@ function ctmsMemberSelectHtml(){
     state.members.map(m => '<option value="' + m.id + '"' + (ui.member === m.id ? " selected" : "") + '>' + esc(m.name) + '</option>').join("") +
   '</select>';
 }
+// 보기 전용 화면에서는 CSS로 입력칸 클릭을 막지만, 체크박스는 옆 글자(label)를 눌러도 바뀌므로 여기서 한 번 더 막는다
+document.addEventListener("click", e => {
+  const t = e.target;
+  if(!t.matches || !t.matches('#tabcontent input:not(.view-ok)')) return;
+  const b = document.body.classList;
+  if((b.contains("role-viewer") && !b.contains("ctms-edit")) || b.contains("save-blocked")) e.preventDefault();
+}, true);
 function ctmsSyncEditMode(){
   if(state.tab === "ctms" && !state.ctmsAuth) state.ctmsAuth = ctmsAutoAuth();
   document.body.classList.toggle("ctms-edit", state.tab === "ctms" && !isAdmin() && !!ctmsAuthOwnerId());
