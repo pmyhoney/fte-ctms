@@ -28,6 +28,25 @@ h1{margin:0;font-size:22px;font-weight:800;letter-spacing:-0.01em;}
   border:1px solid var(--border);background:#fff;color:#475569;font-size:13.5px;font-weight:600;
   white-space:nowrap;transition:all .15s;}
 .tab-btn.active{border-color:var(--accent);background:var(--accent);color:#fff;}
+.tabbar-admin .tab-btn{border-color:#93C5FD;background:#EFF6FF;color:#1D4ED8;}
+.tabbar-admin .tab-btn.active{border-color:#2563EB;background:#2563EB;color:#fff;}
+/* 머리글~탭 줄 화면 위 고정 (app.js renderApp) */
+html{scroll-padding-top:calc(var(--topfix-h,0px) + 56px);}
+.topfix{position:sticky;top:0;z-index:40;background:var(--bg);box-shadow:0 2px 6px rgba(15,23,42,.06);}
+.topfix .wrap.topfix-tabs{padding-bottom:0;}
+.topfix .tabbar{margin:12px 0 0;padding-bottom:10px;}
+.topfix .tabbar-admin{margin-top:0;}
+.topfix + .wrap{padding-top:18px;}
+.ctms-authbar{position:sticky;top:var(--topfix-h,0px);z-index:30;box-shadow:0 0 0 6px var(--bg);}
+/* 맨 위로 버튼 */
+.to-top{position:fixed;right:22px;bottom:22px;z-index:900;width:48px;height:48px;border-radius:50%;
+  border:none;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;
+  box-shadow:0 4px 12px rgba(15,23,42,.25);}
+.to-top:hover{background:#185961;}
+.to-top-tip{position:absolute;right:calc(100% + 8px);top:50%;transform:translateY(-50%);white-space:nowrap;
+  background:#17232E;color:#fff;font-size:12px;font-weight:600;padding:5px 9px;border-radius:6px;
+  opacity:0;pointer-events:none;transition:opacity .15s;}
+.to-top:hover .to-top-tip,.to-top:focus-visible .to-top-tip{opacity:1;}
 .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;}
 .stack{display:flex;flex-direction:column;gap:14px;}
 .empty{padding:36px 12px;text-align:center;color:#94A3B8;font-size:13.5px;}

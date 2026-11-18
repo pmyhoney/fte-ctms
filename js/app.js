@@ -759,17 +759,34 @@ function renderApp(){
   }
   document.body.classList.toggle("save-blocked", !!(state.saveBlocked && isAdmin()));
   app.innerHTML =
-    '<div id="header"></div>' +
-    '<div id="loadwarning"></div>' +
+    // 머리글~탭 줄은 스크롤해도 화면 위에 고정 (CSS .topfix)
+    '<div id="topfix" class="topfix">' +
+      '<div id="header"></div>' +
+      '<div id="loadwarning"></div>' +
+      '<div class="wrap topfix-tabs"><div id="tabbar"></div></div>' +
+    '</div>' +
     '<div class="wrap">' +
-      '<div id="tabbar"></div>' +
       '<div id="tabcontent"></div>' +
-    '</div>';
+    '</div>' +
+    '<button class="to-top" onclick="window.scrollTo({top:0,behavior:\'smooth\'})" aria-label="맨 위로">' +
+      '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>' +
+      '<span class="to-top-tip">맨 위로</span>' +
+    '</button>';
+  watchTopfixHeight();
   renderHeader();
   renderLoadWarning();
   renderTabBar();
   renderTabContent();
   wfhAlertStart(); // wfhalert.js — 재택 일지 미작성 알림
+}
+// 고정된 윗부분의 높이를 CSS 변수(--topfix-h)로 알려 준다 — CTMS 권한 안내 줄이 그 바로 아래에 붙는다
+let topfixObserver = null;
+function watchTopfixHeight(){
+  const el = document.getElementById("topfix");
+  if(topfixObserver) topfixObserver.disconnect();
+  if(!el || typeof ResizeObserver === "undefined") return;
+  topfixObserver = new ResizeObserver(() => document.documentElement.style.setProperty("--topfix-h", el.offsetHeight + "px"));
+  topfixObserver.observe(el);
 }
 function renderLoadWarning(){
   const el = document.getElementById("loadwarning");
@@ -875,15 +892,18 @@ function renderTabBar(){
     { id: "products", label: "품목 관리", icon: "box", adminOnly: true },
     { id: "history", label: "변경 이력", icon: "refresh", adminOnly: true }, // history.js
   ].filter(it => (!it.adminOnly || isSysAdmin()) && (!it.writerOnly || canWrite()));
+  // 관리자 전용 탭은 아래 줄에 파란색으로 따로 표시
+  const row = (list, cls) => list.length ? '<div class="tabbar '+cls+'">' + list.map(tabBtn).join("") + '</div>' : '';
   document.getElementById("tabbar").innerHTML =
-    '<div class="tabbar">' +
-    items.map(it =>
+    row(items.filter(it => !it.adminOnly), "") + row(items.filter(it => it.adminOnly), "tabbar-admin");
+}
+function tabBtn(it){
+  return (
       '<button class="tab-btn '+((it.id === "fte" ? FTE_SUB_TABS.some(s => s.id === state.tab) : state.tab===it.id)?'active':'')+'" onclick="setTab(\''+it.id+'\')">' +
         icon(it.icon,14) + it.label +
         (it.id === "wfh" && wfhAlertCount() ? '<span class="tab-count" title="재택 일지 미작성">'+wfhAlertCount()+'</span>' : '') + // wfhalert.js
       '</button>'
-    ).join("") +
-    '</div>';
+  );
 }
 
 const ADMIN_ONLY_TABS = ["members", "types", "products", "history"];
@@ -2570,7 +2590,7 @@ function ctmsAuthBarHtml(){
     who = '<b>' + esc(m ? m.name : "삭제된 팀원") + '</b> 담당자 · 담당 과제만 표시 · 입력 가능';
   }else if(a.mode === "admin") who = '<b>관리자</b> · 전체 과제 · 입력 가능';
   else who = '<b>전체 조회</b> · 읽기 전용 (관리자가 계정에 팀원을 연결하면 본인 과제를 입력할 수 있어요)';
-  return '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:9px 12px;background:#E5F1F1;border-radius:9px;margin-bottom:12px;font-size:12.5px;color:#1F6F78;">' +
+  return '<div class="ctms-authbar" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:9px 12px;background:#E5F1F1;border-radius:9px;margin-bottom:12px;font-size:12.5px;color:#1F6F78;">' +
     '<span>' + who + '</span></div>';
 }
 
