@@ -165,7 +165,7 @@ function histDetailOpen(id){
   const e = (hist.log || []).find(x => x.id === id);
   if(!e) return;
   const rows = histChanges(e);
-  const canRevert = e.table_name !== "profiles";
+  const canRevert = e.table_name !== "profiles" && isSysAdmin(); // 다른 사람 기록을 바꾸므로 관리자만 (서버도 같은 기준)
   const revertLabel = { INSERT: "추가 취소 (삭제)", UPDATE: "이전 내용으로 되돌리기", DELETE: "삭제 취소 (다시 추가)" }[e.op];
   showModal(
     '<div style="font-weight:800;font-size:14px;margin-bottom:4px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">' +

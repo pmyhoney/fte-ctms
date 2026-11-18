@@ -163,7 +163,7 @@ let state = {
 };
 let saveTimer = null;
 // isAdmin: FTE 관리·CTMS 편집, 재택 전체 조회 권한 (관리자 + 팀장)
-// isSysAdmin: 관리자 계정만 — 팀원 관리·과제 유형·품목 관리 탭, 백업 불러오기, 다른 사람의 주간보고·교육 수정
+// isSysAdmin: 관리자 계정만 — 회원 승인·삭제, 변경 하나 되돌리기, 백업 불러오기, 다른 사람의 주간보고·교육 수정
 function isAdmin(){ return state.role === "admin"; }
 function isSysAdmin(){ return isAdmin() && !!currentProfile && currentProfile.role === "admin"; }
 
@@ -891,7 +891,7 @@ function renderTabBar(){
     { id: "types", label: "과제 유형", icon: "list", adminOnly: true },
     { id: "products", label: "품목 관리", icon: "box", adminOnly: true },
     { id: "history", label: "변경 이력", icon: "refresh", adminOnly: true }, // history.js
-  ].filter(it => (!it.adminOnly || isSysAdmin()) && (!it.writerOnly || canWrite()));
+  ].filter(it => (!it.adminOnly || isAdmin()) && (!it.writerOnly || canWrite())); // 관리 탭: 관리자 + 팀장
   // 관리자 전용 탭은 아래 줄에 파란색으로 따로 표시
   const row = (list, cls) => list.length ? '<div class="tabbar '+cls+'">' + list.map(tabBtn).join("") + '</div>' : '';
   document.getElementById("tabbar").innerHTML =
@@ -922,7 +922,7 @@ function fteSubTabBar(){
 }
 function setTab(id){
   if(id === "fte") id = lastFteSubTab;
-  if(ADMIN_ONLY_TABS.indexOf(id) >= 0 && !isSysAdmin()) id = "dashboard";
+  if(ADMIN_ONLY_TABS.indexOf(id) >= 0 && !isAdmin()) id = "dashboard";
   if(FTE_SUB_TABS.some(s => s.id === id)) lastFteSubTab = id;
   state.tab = id; renderTabBar(); renderTabContent();
 }
@@ -948,7 +948,7 @@ function renderTabContentPreserveFocus(){
 
 function renderTabContent(){
   // 뷰어(또는 역할 전환 직후)에는 관리 탭이 없으므로, 그 탭에 머물러 있었다면 첫 화면으로 돌린다.
-  if(ADMIN_ONLY_TABS.indexOf(state.tab) >= 0 && !isSysAdmin()){ state.tab = "dashboard"; renderTabBar(); }
+  if(ADMIN_ONLY_TABS.indexOf(state.tab) >= 0 && !isAdmin()){ state.tab = "dashboard"; renderTabBar(); }
   ctmsSyncEditMode();
   const el = document.getElementById("tabcontent");
   if(state.tab === "dashboard") el.innerHTML = renderDashboard();
@@ -1884,7 +1884,7 @@ function renderMembersTab(){
     html += '<div style="font-size:11.5px;color:#94A3B8;margin-top:10px;line-height:1.5;">팀장으로 표시하면 과제 배정 대상에서 빠지고, 배정 현황·과제 배정·과제 진행 현황·월별/분기별 화면에 보이지 않아요.<br/>이름 왼쪽 동그라미를 누르면 배지 색을 고를 수 있어요. 재택 달력의 색은 아래 회원 승인의 \'팀원 연결\'을 따르고, 연결이 없으면 같은 이름의 팀원을 찾아요.</div>';
   }
   html += '</div>';
-  html += profilesSectionHtml();
+  if(isSysAdmin()) html += profilesSectionHtml(); // 회원 승인·삭제는 관리자만 (팀장에게는 숨김)
   html += '</div>';
   return html;
 }
